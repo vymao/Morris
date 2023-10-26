@@ -188,6 +188,7 @@ def chunk_bytes_iter(iterator, chunk_len: int, stride: Tuple[int, int], stream: 
         )
     _stride_left = 0
     for raw in iterator:
+        print(len(raw))
         acc += raw
         if stream and len(acc) < chunk_len:
             stride = (_stride_left, 0)

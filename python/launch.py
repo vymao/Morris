@@ -1,37 +1,29 @@
 from utils import ffmpeg_microphone_live
 import sys
 
-def transcribe(transcriber, chunk_length_s=5.0, stream_chunk_s=1.0):
+def transcribe(transcriber, chunk_yield_multiplier_list, chunk_length_s=5.0, stream_chunk_s=1.0):
     sampling_rate = transcriber.feature_extractor.sampling_rate
 
+    mic_count = [0 for i in range(len(chunk_yield_multiplier_list))]
+    mic_list =[b"" for i in range(len(chunk_yield_multiplier_list))]
     mic = ffmpeg_microphone_live(
         sampling_rate=sampling_rate,
         chunk_length_s=chunk_length_s,
         stream_chunk_s=stream_chunk_s,
     )
 
-    last_text = ""
-
     print("Start speaking...")
-    for item in transcriber(mic, generate_kwargs={"max_new_tokens": 128}):
-        #sys.stdout.write("\033[K")
-        next_text = item["text"]
-        """
-        output_text = ""
-        truncated_next_text = next_text[:len(last_text)]
-        print("Truncated: ", truncated_next_text)
-        print("Last: ", last_text)
-        if last_text != truncated_next_text or not last_text:
-            output_text = next_text
-        else: 
-            output_text = truncated_next_text
 
-        last_text = next_text
-        print(output_text)
-        """
-        print(next_text)
-        #if not item["partial"][0]:
-        #    break
+    for item in mic:
+        for i in range(len(mic_count)):
+            mic_count[i] += 1
+            mic_list[i] += item
+            if chunk_yield_multiplier_list[i] % mic_count[i]:
+                transcribed = transcriber(mic_list[i], generate_kwargs={"max_new_tokens": 50 * chunk_yield_multiplier_list[i]})
+                next_text = transcribed["text"]
+                print(next_text)
+                mic_count[i] = 0
+                mic_list[i] = b""
 
     return item["text"]
 
