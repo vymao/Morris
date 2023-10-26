@@ -161,7 +161,6 @@ def ffmpeg_microphone_live(
     delta = datetime.timedelta(seconds=chunk_s)
     for item in chunk_bytes_interval_iter(microphone, chunk_len, stride=(stride_left, stride_right), stream=True):
         # Put everything back in numpy scale
-        item["raw"] = np.frombuffer(item["raw"], dtype=dtype)
         item["stride"] = (
             item["stride"][0] // size_of_sample,
             item["stride"][1] // size_of_sample,
@@ -188,7 +187,6 @@ def chunk_bytes_iter(iterator, chunk_len: int, stride: Tuple[int, int], stream: 
         )
     _stride_left = 0
     for raw in iterator:
-        print(len(raw))
         acc += raw
         if stream and len(acc) < chunk_len:
             stride = (_stride_left, 0)

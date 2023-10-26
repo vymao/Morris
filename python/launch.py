@@ -1,29 +1,59 @@
 from utils import ffmpeg_microphone_live
 import sys
+import copy
+import numpy as np
+from colorama import Fore, Style
+
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKCYAN = '\033[96m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+
+def print_color_code(index, text):
+    colors = [Fore.CYAN, Fore.GREEN, Fore.YELLOW]
+    print(f"{colors[index]}{text}{Style.RESET_ALL}")
+
+def create_new_item(sampling_rate, stride=(0.0, 0.0), chunk=b"", partial=False):
+    return {"raw": chunk, "sampling_rate": sampling_rate, "stride": stride, "partial": partial}
 
 def transcribe(transcriber, chunk_yield_multiplier_list, chunk_length_s=5.0, stream_chunk_s=1.0):
     sampling_rate = transcriber.feature_extractor.sampling_rate
 
     mic_count = [0 for i in range(len(chunk_yield_multiplier_list))]
-    mic_list =[b"" for i in range(len(chunk_yield_multiplier_list))]
+    mic_list =[create_new_item(sampling_rate) for i in range(len(chunk_yield_multiplier_list))]
     mic = ffmpeg_microphone_live(
         sampling_rate=sampling_rate,
         chunk_length_s=chunk_length_s,
         stream_chunk_s=stream_chunk_s,
+        stride_length_s=0.0
     )
 
     print("Start speaking...")
 
     for item in mic:
         for i in range(len(mic_count)):
+            if mic_count[i] == 0:
+                mic_list[i] = copy.deepcopy(item)
+            else:
+                mic_list[i]["raw"] += copy.deepcopy(item["raw"])
+
             mic_count[i] += 1
-            mic_list[i] += item
-            if chunk_yield_multiplier_list[i] % mic_count[i]:
-                transcribed = transcriber(mic_list[i], generate_kwargs={"max_new_tokens": 50 * chunk_yield_multiplier_list[i]})
+
+            if mic_count[i] % (chunk_yield_multiplier_list[i] * chunk_length_s) == 0:
+                mic_list[i]["raw"] = np.frombuffer(mic_list[i]["raw"], dtype=np.float32)
+                print(len(mic_list[i]["raw"]))
+                transcribed = transcriber(mic_list[i], generate_kwargs={"max_new_tokens": 1000000})
                 next_text = transcribed["text"]
-                print(next_text)
+                print_color_code(i, next_text)
                 mic_count[i] = 0
-                mic_list[i] = b""
+                mic_list[i] = create_new_item(sampling_rate)
+        print(mic_count)
 
     return item["text"]
 

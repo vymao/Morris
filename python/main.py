@@ -14,6 +14,6 @@ transcriber = pipeline(
 )
 
 chunk_yield_minimum_length = 2.0
-chunk_yield_length_multiples = [1.0, 5.0, 15.0]
+chunk_yield_length_multiples = [1.0, 5.0, 10.0]
 #launch_fn(classifier, debug=True)
 transcribe(transcriber, chunk_yield_length_multiples, chunk_length_s=chunk_yield_minimum_length, stream_chunk_s=3.0)
