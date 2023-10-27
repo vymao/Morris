@@ -34,6 +34,8 @@ def transcribe(transcriber, chunk_yield_multiplier_list, chunk_length_s=5.0, str
         stride_length_s=0.0
     )
 
+    result = [[] for i in range(len(chunk_yield_multiplier_list))]
+
     print("Start speaking...")
 
     for item in mic:
@@ -43,19 +45,21 @@ def transcribe(transcriber, chunk_yield_multiplier_list, chunk_length_s=5.0, str
             else:
                 mic_list[i]["raw"] += copy.deepcopy(item["raw"])
 
-            mic_count[i] += 1
+            mic_count[i] += chunk_length_s
 
             if mic_count[i] % (chunk_yield_multiplier_list[i] * chunk_length_s) == 0:
                 mic_list[i]["raw"] = np.frombuffer(mic_list[i]["raw"], dtype=np.float32)
-                print(len(mic_list[i]["raw"]))
                 transcribed = transcriber(mic_list[i], generate_kwargs={"max_new_tokens": 1000000})
                 next_text = transcribed["text"]
-                print_color_code(i, next_text)
+            
+                if i > 0:
+                    result[i - 1] = []
+                result[i].append(next_text)
+
                 mic_count[i] = 0
                 mic_list[i] = create_new_item(sampling_rate)
-        print(mic_count)
 
-    return item["text"]
+    return result
 
 def launch_fn(
     classifier,
