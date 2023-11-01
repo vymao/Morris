@@ -1,2 +1,9 @@
 .vscode/*
 *egg-info*
+**bazel-bin**
+**bazel-out**
+**bazel-cpp**
+**bazel-testlogs**
+
+# Traced PyTorch models
+**.pt
