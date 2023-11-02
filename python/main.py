@@ -9,7 +9,7 @@ from transcribe.transcriber import Transcriber
 from python.multiprocessing.queue import *
 
 
-def main():
+def parse_args():
     import argparse
 
     parser = argparse.ArgumentParser()
@@ -20,6 +20,10 @@ def main():
         "--transcriber", "-t", type=str, default="openai/whisper-base.en"
     )
     args = parser.parse_args()
+    return args
+
+def main():
+    args = parse_args()
 
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
@@ -27,7 +31,7 @@ def main():
     chunk_yield_length_multiples = [2, 6, 12]
 
     wake = mp.Value(c_bool)
-    chunk_queue = mp.Queue()
+    classify_queue = mp.Queue()
 
     res_queues = []
     for i in range(len(chunk_yield_length_multiples)):
@@ -40,17 +44,29 @@ def main():
         chunk_length_s=chunk_yield_minimum_length,
     )
 
+    sampling_rate = transcriber.transcriber.feature_extractor.sampling_rate
+    item_queues = []
+    for i in range(len(chunk_yield_length_multiples)):
+        item_queues.append(CounterQueue())
+
+    transcriber.create_processes(
+        item_queues,
+        res_queues,
+        sampling_rate,
+    )
+
     wake_process = mp.Process(
         name="wake_process_test_transcription",
         target=classifier.classify,
-        args=(wake, chunk_queue, True),
+        args=(wake, classify_queue, True),
     )
 
     transcribe_process = mp.Process(
         name="transcribe_process_test_transcription",
         target=transcriber.transcribe,
-        args=(chunk_queue, res_queues),
+        args=(classify_queue, item_queues),
     )
+
     wake_process.daemon = True
     transcribe_process.daemon = True
 
