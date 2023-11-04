@@ -44,7 +44,10 @@ def main():
         chunk_length_s=chunk_yield_minimum_length,
     )
 
-    sampling_rate = transcriber.transcriber.feature_extractor.sampling_rate
+    transcriber_sampling_rate = transcriber.transcriber.feature_extractor.sampling_rate
+    classifier_sampling_rate = classifier.classifier.feature_extractor.sampling_rate
+    print(f"Transcriber sampling rate: {transcriber_sampling_rate}")
+    print(f"Classifier sampling rate: {classifier_sampling_rate}")
     item_queues = []
     for i in range(len(chunk_yield_length_multiples)):
         item_queues.append(CounterQueue())
@@ -52,7 +55,7 @@ def main():
     transcriber.create_processes(
         item_queues,
         res_queues,
-        sampling_rate,
+        transcriber_sampling_rate,
     )
 
     wake_process = mp.Process(

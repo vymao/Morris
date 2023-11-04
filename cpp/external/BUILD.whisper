@@ -85,7 +85,7 @@ cc_library(
             "Accelerate",
         ],
     }),
-    deps = ["@com_github_libsdl_sdl2//:SDL"],
+    deps = ["@com_github_libsdl_sdl2//:SDL", "@com_github_libsdl_sdl2//:include"],
 )
 
 cc_library(
@@ -113,7 +113,7 @@ cc_library(
 
 cc_library(
     name = "whisper",
-    srcs = ["whisper.cpp", "examples/common.cpp", "examples/common-sdl.cpp"],
+    srcs = ["whisper.cpp"],
     hdrs = HEADERS + EXAMPLE_HEADERS,
     copts = CXXFLAGS + selects.with_or({
         "//conditions:default": [],
