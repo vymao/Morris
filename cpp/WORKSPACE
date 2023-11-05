@@ -1,18 +1,218 @@
+workspace(name = "morris")
+
 load("//:deps.bzl", "whisper", "extra_bazel_deps", "torch", "torch_deps")
-load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
+load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository", "new_git_repository")
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+git_repository(
+    name = "pytorch",
+    remote = "https://github.com/pytorch/pytorch.git",
+    tag = "v2.1.1-rc5",
+    build_file = "//:external/BUILD.torch",
+    init_submodules = True,
+    recursive_init_submodules = True
+)
+
+load("@pytorch//tools/rules:workspace.bzl", "new_patched_local_repository")
 
 whisper()
 extra_bazel_deps()
-torch_deps()
+#torch_deps()
 
 load("@rules_foreign_cc//foreign_cc:repositories.bzl", "rules_foreign_cc_dependencies")
 rules_foreign_cc_dependencies()
 
 
+http_archive(
+    name = "rules_cuda",
+    strip_prefix = "runtime-b1c7cce21ba4661c17ac72421c6a0e2015e7bef3/third_party/rules_cuda",
+    urls = ["https://github.com/tensorflow/runtime/archive/b1c7cce21ba4661c17ac72421c6a0e2015e7bef3.tar.gz"],
+)
+
+load("@rules_cuda//cuda:dependencies.bzl", "rules_cuda_dependencies")
+
+rules_cuda_dependencies(with_rules_cc = False)
+
+load("@rules_cc//cc:repositories.bzl", "rules_cc_toolchains")
+
+rules_cc_toolchains()
+
+http_archive(
+    name = "bazel_skylib",
+    urls = [
+        "https://github.com/bazelbuild/bazel-skylib/releases/download/1.0.2/bazel-skylib-1.0.2.tar.gz",
+    ],
+)
+
+http_archive(
+    name = "pybind11_bazel",
+    strip_prefix = "pybind11_bazel-b162c7c88a253e3f6b673df0c621aca27596ce6b",
+    urls = ["https://github.com/pybind/pybind11_bazel/archive/b162c7c88a253e3f6b673df0c621aca27596ce6b.zip"],
+)
+
+new_local_repository(
+    name = "pybind11",
+    build_file = "@pybind11_bazel//:pybind11.BUILD",
+    path = "external/pytorch/third_party/pybind11",
+)
+
+http_archive(
+    name = "com_github_glog",
+    build_file_content = """
+licenses(['notice'])
+
+load(':bazel/glog.bzl', 'glog_library')
+# TODO: figure out why enabling gflags leads to SIGSEV on the logging init
+glog_library(with_gflags=0)
+    """,
+    strip_prefix = "glog-0.4.0",
+    urls = [
+        "https://github.com/google/glog/archive/v0.4.0.tar.gz",
+    ],
+)
+
+http_archive(
+    name = "com_github_gflags_gflags",
+    strip_prefix = "gflags-2.2.2",
+    urls = [
+        "https://github.com/gflags/gflags/archive/v2.2.2.tar.gz",
+    ],
+)
+
+new_local_repository(
+    name = "gloo",
+    build_file = "@pytorch//:third_party/gloo.BUILD",
+    path = "external/gloo",
+)
+
+new_local_repository(
+    name = "onnx",
+    build_file = "@pytorch//:third_party/onnx.BUILD",
+    path = "external/pytorch/third_party/onnx",
+)
+
+new_local_repository(
+    name = "foxi",
+    build_file = "@pytorch//:third_party/foxi.BUILD",
+    path = "external/pytorch/third_party/foxi",
+)
+
+local_repository(
+    name = "com_google_protobuf",
+    path = "external/pytorch/third_party/protobuf",
+)
+
+new_local_repository(
+    name = "eigen",
+    build_file = "@pytorch//:third_party/eigen.BUILD",
+    path = "external/pytorch/third_party/eigen",
+)
+
+new_local_repository(
+    name = "cutlass",
+    build_file = "@pytorch//:third_party/cutlass.BUILD",
+    path = "external/pytorch/third_party/cutlass",
+)
+
+new_local_repository(
+    name = "fbgemm",
+    build_file = "@pytorch//:third_party/fbgemm/BUILD.bazel",
+    path = "external/fbgemm",
+    repo_mapping = {"@cpuinfo": "@org_pytorch_cpuinfo"},
+)
+
+new_local_repository(
+    name = "ideep",
+    build_file = "@pytorch//:third_party/ideep.BUILD",
+    path = "external/pytorch/third_party/ideep",
+)
+
+new_local_repository(
+    name = "mkl_dnn",
+    build_file = "@pytorch//:third_party/mkl-dnn.BUILD",
+    path = "external/pytorch/third_party/ideep/mkl-dnn",
+)
+
+new_local_repository(
+    name = "org_pytorch_cpuinfo",
+    build_file = "@pytorch//:third_party/cpuinfo/BUILD.bazel",
+    path = "external/pytorch/third_party/cpuinfo",
+)
+
+new_local_repository(
+    name = "asmjit",
+    build_file = "@pytorch//:third_party/fbgemm/third_party/asmjit.BUILD",
+    path = "external/pytorch/third_party/fbgemm/third_party/asmjit",
+)
+
+new_local_repository(
+    name = "sleef",
+    build_file = "@pytorch//:third_party/sleef.BUILD",
+    path = "external/pytorch/third_party/sleef",
+)
+
+new_local_repository(
+    name = "fmt",
+    build_file = "@pytorch//:third_party/fmt.BUILD",
+    path = "external/pytorch/third_party/fmt",
+)
+
+new_local_repository(
+    name = "kineto",
+    build_file = "@pytorch//:third_party/kineto.BUILD",
+    path = "external/pytorch/third_party/kineto",
+)
+
+new_patched_local_repository(
+    name = "tbb",
+    build_file = "//external:BUILD.tbb",
+    patch_strip = 1,
+    patches = [
+        "@pytorch//:third_party/tbb.patch",
+    ],
+    path = "external/pytorch/third_party/tbb",
+)
+
+new_local_repository(
+    name = "tensorpipe",
+    build_file = "@pytorch//:third_party/tensorpipe.BUILD",
+    path = "external/pytorch/third_party/tensorpipe",
+)
+
+http_archive(
+    name = "mkl",
+    build_file = "@pytorch//:third_party/mkl.BUILD",
+    sha256 = "59154b30dd74561e90d547f9a3af26c75b6f4546210888f09c9d4db8f4bf9d4c",
+    strip_prefix = "lib",
+    urls = [
+        "https://anaconda.org/anaconda/mkl/2020.0/download/linux-64/mkl-2020.0-166.tar.bz2",
+    ],
+)
+
+http_archive(
+    name = "mkl_headers",
+    build_file = "@pytorch//:third_party/mkl_headers.BUILD",
+    sha256 = "2af3494a4bebe5ddccfdc43bacc80fcd78d14c1954b81d2c8e3d73b55527af90",
+    urls = [
+        "https://anaconda.org/anaconda/mkl-include/2020.0/download/linux-64/mkl-include-2020.0-166.tar.bz2",
+    ],
+)
+
+http_archive(
+    name = "rules_python",
+    # TODO Fix bazel linter to support hashes for release tarballs.
+    #
+    # sha256 = "94750828b18044533e98a129003b6a68001204038dc4749f40b195b24c38f49f",
+    strip_prefix = "rules_python-0.21.0",
+    url = "https://github.com/bazelbuild/rules_python/releases/download/0.21.0/rules_python-0.21.0.tar.gz",
+)
+
 load("@rules_python//python:repositories.bzl", "py_repositories")
+
 py_repositories()
 
 load("@rules_python//python:repositories.bzl", "python_register_toolchains")
+
 python_register_toolchains(
     name = "python3_8",
     python_version = "3.8",
@@ -20,40 +220,133 @@ python_register_toolchains(
 
 load("@python3_8//:defs.bzl", "interpreter")
 load("@rules_python//python:pip.bzl", "pip_parse")
+
 pip_parse(
     name = "pip_deps",
     python_interpreter_target = interpreter,
     requirements_lock = "@pytorch//:tools/build/bazel/requirements.txt",
 )
+
 load("@pip_deps//:requirements.bzl", "install_deps")
+
 install_deps()
 
-load("@rules_cuda//cuda:dependencies.bzl", "rules_cuda_dependencies")
-rules_cuda_dependencies(with_rules_cc = False)
-
-
-
 load("@pybind11_bazel//:python_configure.bzl", "python_configure")
+
 python_configure(
     name = "local_config_python",
     python_interpreter_target = interpreter,
 )
 
-load("@pytorch//:tools/bazel.bzl", "rules")
+load("@com_google_protobuf//:protobuf_deps.bzl", "protobuf_deps")
 
-load("@aspect_rules_js//npm:npm_import.bzl", "npm_translate_lock", "pnpm_repository")
+protobuf_deps()
 
-npm_translate_lock(
-    name = "npm",
-    npmrc = "@aspect_rules_js//:.npmrc",
-    pnpm_lock = "@aspect_rules_js//:pnpm-lock.yaml",
-    # Set this to True when the lock file needs to be updated, commit the
-    # changes, then set to False again.
-    update_pnpm_lock = False,
-    verify_node_modules_ignored = "@aspect_rules_js//:.bazelignore",
+new_local_repository(
+    name = "cuda",
+    build_file = "@pytorch//:third_party/cuda.BUILD",
+    path = "/usr/local/cuda",
 )
 
-load("@rules_pkg//:deps.bzl", "rules_pkg_dependencies")
-rules_pkg_dependencies()
+new_local_repository(
+    name = "cudnn",
+    build_file = "@pytorch//:third_party/cudnn.BUILD",
+    path = "/usr/",
+)
 
-torch()
+local_repository(
+    name = "com_github_google_flatbuffers",
+    path = "external/pytorch/third_party/flatbuffers",
+)
+
+local_repository(
+    name = "google_benchmark",
+    path = "external/pytorch/third_party/benchmark",
+)
+
+local_repository(
+    name = "com_google_googletest",
+    path = "external/pytorch/third_party/googletest",
+)
+
+local_repository(
+    name = "pthreadpool",
+    path = "external/pytorch/third_party/pthreadpool",
+    repo_mapping = {"@com_google_benchmark": "@google_benchmark"},
+)
+
+local_repository(
+    name = "FXdiv",
+    path = "external/pytorch/third_party/FXdiv",
+    repo_mapping = {"@com_google_benchmark": "@google_benchmark"},
+)
+
+local_repository(
+    name = "XNNPACK",
+    path = "external/pytorch/third_party/XNNPACK",
+    repo_mapping = {"@com_google_benchmark": "@google_benchmark"},
+)
+
+local_repository(
+    name = "gemmlowp",
+    path = "external/pytorch/third_party/gemmlowp/gemmlowp",
+)
+
+### Unused repos start
+
+# `unused` repos are defined to hide bazel files from submodules of submodules.
+# This allows us to run `bazel build //...` and not worry about the submodules madness.
+# Otherwise everything traverses recursively and a lot of submodules of submodules have
+# they own bazel build files.
+
+local_repository(
+    name = "unused_tensorpipe_googletest",
+    path = "external/pytorch/third_party/tensorpipe/external/pytorch/third_party/googletest",
+)
+
+local_repository(
+    name = "unused_fbgemm",
+    path = "external/pytorch/third_party/fbgemm",
+)
+
+local_repository(
+    name = "unused_ftm_bazel",
+    path = "external/pytorch/third_party/fmt/support/bazel",
+)
+
+local_repository(
+    name = "unused_kineto_fmt_bazel",
+    path = "external/pytorch/third_party/kineto/libkineto/external/pytorch/third_party/fmt/support/bazel",
+)
+
+local_repository(
+    name = "unused_kineto_dynolog_googletest",
+    path = "external/pytorch/third_party/kineto/libkineto/external/pytorch/third_party/dynolog/external/pytorch/third_party/googletest",
+)
+
+local_repository(
+    name = "unused_kineto_dynolog_gflags",
+    path = "external/pytorch/third_party/kineto/libkineto/external/pytorch/third_party/dynolog/external/pytorch/third_party/gflags",
+)
+
+local_repository(
+    name = "unused_kineto_dynolog_glog",
+    path = "external/pytorch/third_party/kineto/libkineto/external/pytorch/third_party/dynolog/external/pytorch/third_party/glog",
+)
+
+local_repository(
+    name = "unused_kineto_googletest",
+    path = "external/pytorch/third_party/kineto/libkineto/external/pytorch/third_party/googletest",
+)
+
+local_repository(
+    name = "unused_onnx_benchmark",
+    path = "external/pytorch/third_party/onnx/external/pytorch/third_party/benchmark",
+)
+
+local_repository(
+    name = "unused_onnx_tensorrt_benchmark",
+    path = "external/pytorch/third_party/onnx-tensorrt/external/pytorch/third_party/onnx/external/pytorch/third_party/benchmark",
+)
+
+### Unused repos end

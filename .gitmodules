@@ -1,0 +1,9 @@
+[submodule "cpp/external/pytorch"]
+	path = cpp/external/pytorch
+	url = https://github.com/pytorch/pytorch.git
+[submodule "cpp/external/gloo"]
+	path = cpp/external/gloo
+	url = https://github.com/vymao/gloo.git
+[submodule "cpp/external/fbgemm"]
+	path = cpp/external/fbgemm
+	url = https://github.com/pytorch/FBGEMM.git
