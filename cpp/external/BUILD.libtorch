@@ -1,0 +1,49 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+package(default_visibility = ["//visibility:public"])
+load("@bazel_skylib//lib:selects.bzl", "selects")
+
+cc_library(
+    name = "torch",
+    srcs = [
+        "lib/libtorch.so",
+        "lib/libc10.so",
+        "lib/libcaffe2.so",
+        "lib/libcaffe2_gpu.so",
+        "lib/libc10_cuda.so"
+    ],
+    linkopts = [
+        "-lcuda", 
+        "-ltorch",
+        "-lcaffe2",
+        "-lc10",
+        "-lcaffe2_gpu",
+        "-lc10_cuda",
+    ],
+    hdrs = glob(["include/**/*.h"]),
+    includes = [
+        "include",
+        "include/torch/csrc/api/include",
+        "include/THC",
+        "include/TH",
+    ],
+    copts = ["-D_GLIBCXX_USE_CXX11_ABI=0"],
+    visibility = ["//visibility:public"]
+)
+
+cc_library(
+    name = "torch_cpu",
+    srcs = glob([
+        "lib/libtorch.dylib",
+        "lib/libtorch_global_deps.dylib",
+        "lib/libtorch_cpu.dylib",
+        "lib/libshm.dylib",
+        "lib/libc10.dylib",
+        "lib/libiomp5.dylib"
+    ]),
+    hdrs = glob(["include/**/*.h", "include/torch/csrc/api/include/torch/*.h"]),
+    includes = [
+        "include",
+        "include/torch/csrc/api/include",
+    ],
+    visibility = ["//visibility:public"]
+)

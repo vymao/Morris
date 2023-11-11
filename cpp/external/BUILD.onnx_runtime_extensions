@@ -1,0 +1,21 @@
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "cmake")
+
+filegroup(
+    name = "all_srcs",
+    srcs = glob(["**"]),
+)
+
+cc_library(
+    name = "include",
+    hdrs = glob(["includes/**"]),
+    strip_include_prefix = "includes",
+)
+
+cmake(
+    name = "onnx_extensions",
+    lib_source = ":all_srcs",
+    cache_entries = {
+        "OCOS_ONNXRUNTIME_VERSION": "1.16.2",
+    },
+    visibility = ["//visibility:public"]
+)

@@ -24,7 +24,7 @@ cmake(
     cache_entries = {
         "CMAKE_C_FLAGS": "-fPIC",
         "CMAKE_OSX_ARCHITECTURES": "x86_64;arm64",
-        "CMAKE_OSX_DEPLOYMENT_TARGET": "10.14",
+        "CMAKE_OSX_DEPLOYMENT_TARGET": "13.5",
         "CMAKE_POSITION_INDEPENDENT_CODE": "ON",
         "CMAKE_INSTALL_LIBDIR": "lib",
         "SDL_SHARED": "OFF",

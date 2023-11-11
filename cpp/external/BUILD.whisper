@@ -6,7 +6,15 @@ package(default_visibility = ["//visibility:public"])
 exports_files(
     [
         "ggml.h",
+        "ggml-impl.h",
+        "ggml-quants.h",
+        "ggml-alloc.h",
+        "ggml-backend-impl.h",
+        "ggml-backend.h",
         "ggml.c",
+        "ggml-quants.c", 
+        "ggml-alloc.c",
+        "ggml-backend.c",
         "whisper.h",
         "whisper.cpp",
     ] + glob(["examples/*.cpp"]) + glob(["examples/*.h"]),
@@ -15,6 +23,11 @@ exports_files(
 HEADERS = [
     "ggml.h",
     "whisper.h",
+    "ggml-impl.h",
+    "ggml-quants.h",
+    "ggml-alloc.h",
+    "ggml-backend-impl.h",
+    "ggml-backend.h",
 ]
 
 EXAMPLE_HEADERS = [
@@ -90,7 +103,7 @@ cc_library(
 
 cc_library(
     name = "ggml",
-    srcs = ["ggml.c"],
+    srcs = ["ggml.c", "ggml-quants.c", "ggml-alloc.c", "ggml-backend.c"],
     hdrs = HEADERS,
     copts = CFLAGS + selects.with_or({
         "//conditions:default": [],

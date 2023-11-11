@@ -1,0 +1,11 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+package(default_visibility = ["//visibility:public"])
+load("@bazel_skylib//lib:selects.bzl", "selects")
+
+cc_library(
+    name = "onnx_runtime",
+    srcs = glob(["lib/*.dylib"]),
+    hdrs = glob(["include/*.h"]),
+    includes = ["include"],
+    visibility = ["//visibility:public"]
+)

@@ -25,9 +25,24 @@ cc_binary(
     srcs = ["main.cc"],
     deps = [
         "@com_github_ggerganov_whisper//:whisper",
+        "@com_github_libsdl_sdl2//:include",
+        "@onnx_runtime//:onnx_runtime",
+        "@onnx_runtime_extensions//:onnx_extensions",
+        ":run"
+    ]
+)
+
+cc_library(
+    name = "run",
+    srcs = ["run.cc"],
+    hdrs = ["run.h"],
+    deps = [
+        "@com_github_ggerganov_whisper//:whisper",
         "@com_github_ggerganov_whisper//:common",
         "@com_github_ggerganov_whisper//:common-sdl",
         "@com_github_libsdl_sdl2//:include",
-        "@pytorch//:torch"
+        "@com_github_ggerganov_whisper//:ggml",
+        "@libtorch//:torch_cpu",
+        "@onnx_runtime//:onnx_runtime"
     ]
 )

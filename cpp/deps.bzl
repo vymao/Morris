@@ -10,6 +10,15 @@ def _github_archive(repo, commit, **kwargs):
         **kwargs
     )
 
+def libtorch():
+    http_archive(
+        name = "libtorch",
+        strip_prefix = "libtorch",
+        type = "zip",
+        urls = ["https://download.pytorch.org/libtorch/cpu/libtorch-macos-2.1.0.zip"],
+        build_file = Label("//external:BUILD.libtorch")
+    )
+
 def whisper():
     maybe(
         new_git_repository,
@@ -18,7 +27,7 @@ def whisper():
         init_submodules = True,
         recursive_init_submodules = True,
         remote = "https://github.com/ggerganov/whisper.cpp.git",
-        tag = "v1.4.0",
+        tag = "v1.4.3",
     )
 
     git_repository(
@@ -46,18 +55,35 @@ def extra_bazel_deps():
         ],
     )
 
-    http_archive(
+    new_git_repository(
         name = "com_github_libsdl_sdl2",
+        remote = "https://github.com/libsdl-org/SDL.git",
         build_file = Label("//external:BUILD.sdl2"),
-        sha256 = "e2ac043bd2b67be328f875043617b904a0bb7d277ba239fe8ac6b9c94b85cbac",
-        strip_prefix = "SDL-dca3fd8307c2c9ebda8d8ea623bbbf19649f5e22",
-        urls = ["https://github.com/libsdl-org/SDL/archive/dca3fd8307c2c9ebda8d8ea623bbbf19649f5e22.zip"],
+        tag = "release-2.28.5",
     )
 
     git_repository(
         name = "rules_python",
         remote = "https://github.com/bazelbuild/rules_python.git",
         tag = "0.26.0",
+    )
+
+def onnx():
+    maybe(
+        http_archive,
+        name = "onnx_runtime",
+        strip_prefix = "onnxruntime-osx-x86_64-1.16.2",
+        type = "tgz",
+        urls = ["https://github.com/microsoft/onnxruntime/releases/download/v1.16.2/onnxruntime-osx-x86_64-1.16.2.tgz"],
+        build_file = Label("//external:BUILD.onnx_runtime"),
+    )
+
+    maybe(
+        new_git_repository,
+        name = "onnx_runtime_extensions",
+        tag = "v0.9.0",
+        remote = "https://github.com/microsoft/onnxruntime-extensions.git",
+        build_file = Label("//external:BUILD.onnx_runtime_extensions")
     )
 
 def torch():
