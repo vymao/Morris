@@ -81,9 +81,29 @@ def onnx():
     maybe(
         new_git_repository,
         name = "onnx_runtime_extensions",
-        tag = "v0.9.0",
         remote = "https://github.com/microsoft/onnxruntime-extensions.git",
+        tag = "v0.9.0",
         build_file = Label("//external:BUILD.onnx_runtime_extensions")
+    )
+
+def pybind():
+    http_archive(
+        name = "pybind11_bazel",
+        strip_prefix = "pybind11_bazel-master",
+        urls = ["https://github.com/pybind/pybind11_bazel/archive/master.zip"],
+    )
+            # We still require the pybind library.
+    http_archive(
+        name = "pybind11",
+        build_file = "@pybind11_bazel//:pybind11.BUILD",
+        strip_prefix = "pybind11-2.11.1",
+        urls = ["https://github.com/pybind/pybind11/archive/v2.11.1.tar.gz"],
+    )
+
+    native.new_local_repository(
+        name = "python_macos",
+        path = "/Users/victor/anaconda3/envs/transformers-v2",
+        build_file = "//external:BUILD.python"
     )
 
 def torch():

@@ -1,4 +1,4 @@
-load("@rules_foreign_cc//foreign_cc:defs.bzl", "cmake")
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "cmake", "boost_build", "ninja")
 
 filegroup(
     name = "all_srcs",
@@ -6,16 +6,9 @@ filegroup(
 )
 
 cc_library(
-    name = "include",
+    name = "headers",
     hdrs = glob(["includes/**"]),
     strip_include_prefix = "includes",
+    visibility = ["//visibility:public"],
 )
 
-cmake(
-    name = "onnx_extensions",
-    lib_source = ":all_srcs",
-    cache_entries = {
-        "OCOS_ONNXRUNTIME_VERSION": "1.16.2",
-    },
-    visibility = ["//visibility:public"]
-)

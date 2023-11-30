@@ -7,3 +7,11 @@
 
 # Traced PyTorch models
 **.pt
+
+# ONNX/Olive models
+cpp/main/models/
+cpp/python/models/
+cpp/python/cache/
+
+# Pycache
+**/__pycache__/**

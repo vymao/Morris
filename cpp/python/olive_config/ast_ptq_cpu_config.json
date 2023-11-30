@@ -1,0 +1,111 @@
+{
+    "input_model":{
+        "type": "ONNXModel",
+        "config": {
+            "model_path": "/Users/victor/Desktop/Morris/cpp/main/models/ast-model-2/model.onnx"
+
+        }
+    },
+    "systems": {
+        "local_system": {
+            "type": "LocalSystem",
+            "config": {
+                "accelerators": [
+                    "cpu"
+                ]
+            }
+        }
+    },
+    "evaluators": {
+        "common_evaluator": {
+            "metrics":[
+                {
+                    "name": "accuracy",
+                    "type": "accuracy",
+                    "sub_types": [
+                        {
+                            "name": "accuracy_score", 
+                            "priority": 1, 
+                            "goal": {
+                                "type": "max-degradation", 
+                                "value": 0.05
+                            },
+                            "metric_config": {
+                                "task": "multiclass",
+                                "num_classes": "35",
+                                "top_k": 1,
+                                "average": "weighted"
+                            }
+                        }
+                    ],
+                    "user_config":{
+                        "user_script": "olive_config/ast_dataset.py",
+                        "dataloader_func": "ast_audio_pt_dataloader",
+                        "post_processing_func": "post_processing_func",
+                        "batch_size": 1
+                    }
+                },
+                {
+                    "name": "latency",
+                    "type": "latency",
+                    "sub_types": [
+                        {"name": "avg", "priority": 2, "goal": {"type": "percent-min-improvement", "value": 5}},
+                        {"name": "max"},
+                        {"name": "min"}
+                    ],
+                    "user_config": {
+                        "user_script": "olive_config/ast_dataset.py",
+                        "dataloader_func": "ast_audio_pt_dataloader",
+                        "post_processing_func": "post_processing_func",
+                        "batch_size": 1
+                    }
+                }
+            ]
+        }
+    },
+    "passes": {
+        "optimization": {
+            "type": "OnnxModelOptimizer",
+            "disable_search": true
+        },
+        "onnx_dynamic_quantization": {
+            "type": "OnnxDynamicQuantization",
+            "disable_search": true,
+            "config": {
+                "per_channel": false,
+                "reduce_range": false,
+                "op_types_to_quantize": [
+                    "MatMul",
+                    "Gemm",
+                    "Gather"
+                ],
+                "MatMulConstBOnly": false
+            }
+        },
+        "perf_tuning": {
+            "type": "OrtPerfTuning",
+            "config": {
+                "user_script": "olive_config/ast_dataset.py",
+                "dataloader_func": "ast_audio_pt_dataloader",
+                "post_processing_func": "post_processing_func",
+                "batch_size": 1
+            }
+        }
+    },
+    "engine": {
+        "search_strategy": {
+            "execution_order": "joint",
+            "search_algorithm": "tpe",
+            "search_algorithm_config": {
+                "num_samples": 3,
+                "seed": 0
+            }
+        },
+        "evaluator": "common_evaluator",
+        "execution_providers": ["CPUExecutionProvider"],
+        "cache_dir": "cache",
+        "output_dir" : "models/ast_cpu",
+        "output_name": "ast_cpu_int8",
+        "log_severity_level": 1
+    }
+}

@@ -1,0 +1,8 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+cc_library(
+    name = "python-lib",
+    srcs = ["lib/libpython3.9.dylib"],
+    hdrs = glob(["include/python/*.h"]),
+    visibility = ["//visibility:public"]
+)

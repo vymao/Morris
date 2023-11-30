@@ -1,33 +1,30 @@
 load("@bazel_skylib//lib:selects.bzl", "selects")
 load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_python//python:defs.bzl", "py_library")
 
 package(default_visibility = ["//visibility:public"])
 
 COPTS = [
-    "-O3",
+    "-O2",
     "-pthread",
-    "-std=c++11",
+    "-std=c++17",
     "-fPIC",
     "-Wall",
-] + selects.with_or({
-    "//conditions:default": [],
-    "@bazel_tools//src/conditions:linux_x86_64": [
-        "-mavx",
-        "-mavx2",
-        "-mfma",
-        "-mf16c",
-        "-msse3",
-    ],
-})
+] 
 
 cc_binary(
     name = "main",
     srcs = ["main.cc"],
+    copts = COPTS,
     deps = [
         "@com_github_ggerganov_whisper//:whisper",
         "@com_github_libsdl_sdl2//:include",
         "@onnx_runtime//:onnx_runtime",
-        "@onnx_runtime_extensions//:onnx_extensions",
+        #"@onnx_runtime_extensions//:headers",
+        "//main/lib/util:feature_extractor",
+        "@pybind11//:pybind11_embed",
+        "@pybind11",
+        "@python_macos//:python-lib",
         ":run"
     ]
 )
