@@ -11,7 +11,7 @@
 # ONNX/Olive models
 cpp/main/models/
 cpp/python/models/
-cpp/python/cache/
+cpp/python/cache*
 
 # Pycache
 **/__pycache__/**

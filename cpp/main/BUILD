@@ -22,6 +22,7 @@ cc_binary(
         "@onnx_runtime//:onnx_runtime",
         #"@onnx_runtime_extensions//:headers",
         "//main/lib/util:feature_extractor",
+        "//main/lib/wake-classifier:wake_classifier",
         "@pybind11//:pybind11_embed",
         "@pybind11",
         "@python_macos//:python-lib",

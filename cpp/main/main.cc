@@ -21,9 +21,11 @@
 #include <iostream>
 #include <filesystem>
 #include <chrono>
+#include <thread>
 
 #include "run.h"
-#include "lib/feature_extractor.h"
+#include "lib/util/feature_extractor.h"
+#include "lib/wake-classifier/wake_classifier.h"
 
 using std::chrono::high_resolution_clock;
 using std::chrono::duration_cast;
@@ -32,6 +34,9 @@ using std::chrono::milliseconds;
 
 namespace py = pybind11;
 namespace fs = std::filesystem;
+
+constexpr const char* kCpuExecutionProvider = "CPUExecutionProvider";
+static const char* const kOrtSessionOptionsConfigUseEnvAllocators = "session.use_env_allocators";
 
 void whisper_print_usage(int argc, char **argv, const whisper_params &params);
 
@@ -187,36 +192,60 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    std::cout << "Check" << std::endl;
+
+    const int thread_pool_size = std::thread::hardware_concurrency();
+    std::cout << "Threads: " << thread_pool_size << std::endl;
+
     py::scoped_interpreter guard{};
     py::module_ transformers_module = py::module_::import("transformers");
     py::object AutoFeatureExtractor = py::getattr(transformers_module, "AutoFeatureExtractor");
     py::object extractor = AutoFeatureExtractor.attr("from_pretrained")("MIT/ast-finetuned-speech-commands-v2");
 
 
-    Ort::Env env(ORT_LOGGING_LEVEL_WARNING, "example-model-explorer");
-    Ort::SessionOptions session_options;
-    //Ort::ThrowOnError(RegisterCustomOps(static_cast<OrtSessionOptions*>(session_options), OrtGetApiBase()));
-    Ort::Session session = Ort::Session(env, params.model.c_str(), session_options);
+    OrtEnv* environment;
+    OrtThreadingOptions* thread_opts = nullptr;
+    const OrtApi* g_ort = OrtGetApiBase()->GetApi(ORT_API_VERSION);
+    g_ort->CreateThreadingOptions(&thread_opts);
+    g_ort->SetGlobalIntraOpNumThreads(thread_opts, thread_pool_size);
+    g_ort->CreateEnvWithGlobalThreadPools(ORT_LOGGING_LEVEL_WARNING, "onnx_global_threadpool", thread_opts, &environment);
 
-    Ort::AllocatorWithDefaultOptions allocator;
-    std::vector<std::string> input_names;
+    OrtArenaCfg* arena_cfg = nullptr;
+    OrtMemoryInfo* meminfo = nullptr;
+    const char* keys[] = {"max_mem", "arena_extend_strategy", "initial_chunk_size_bytes", "max_dead_bytes_per_chunk", "initial_growth_chunk_size_bytes", "max_power_of_two_extend_bytes"};
+    const size_t values[] = {0 /*let ort pick default max memory*/, 0, 0, 0, 0, 0};
+    g_ort->CreateArenaCfgV2(keys, values, 5, &arena_cfg);
+
+    std::vector<const char*> provider_keys, provider_values;
+    g_ort->CreateAndRegisterAllocatorV2(environment, kCpuExecutionProvider, meminfo, arena_cfg, provider_keys.data(), provider_values.data(), 0);
+
+
+    Ort::SessionOptions session_options;
+    session_options.DisablePerSessionThreads();
+    session_options.AddConfigEntry(kOrtSessionOptionsConfigUseEnvAllocators, "1");
+
+    Ort::Env env = Ort::Env(environment);
+    env.UpdateEnvWithCustomLogLevel(ORT_LOGGING_LEVEL_WARNING);
+
+    //Ort::ThrowOnError(RegisterCustomOps(static_cast<OrtSessionOptions*>(session_options), OrtGetApiBase()));
+    std::shared_ptr<Ort::Session> session_ptr = std::make_shared<Ort::Session>(env, params.model.c_str(), session_options);
+ 
+
+    std::shared_ptr<Ort::AllocatorWithDefaultOptions> allocator_ptr = std::make_shared<Ort::AllocatorWithDefaultOptions>();
+
+    WakeClassifier wake_classifier = WakeClassifier("MIT/ast-finetuned-speech-commands-v2", session_ptr, allocator_ptr);
+
     std::vector<std::int64_t> input_shapes;
-    std::cout << "Input Node Name/Shape (" << input_names.size() << "):" << std::endl;
-    for (std::size_t i = 0; i < session.GetInputCount(); i++)
+    for (std::size_t i = 0; i < session_ptr->GetInputCount(); i++)
     {
-        input_names.emplace_back(session.GetInputNameAllocated(i, allocator).get());
-        input_shapes = session.GetInputTypeInfo(i).GetTensorTypeAndShapeInfo().GetShape();
-        std::cout << "\t" << input_names.at(i) << " : " << print_shape(input_shapes) << std::endl;
+        input_shapes = session_ptr->GetInputTypeInfo(i).GetTensorTypeAndShapeInfo().GetShape();
     }
 
     // print name/shape of outputs
     std::vector<std::string> output_names;
-    std::cout << "Output Node Name/Shape (" << output_names.size() << "):" << std::endl;
-    for (std::size_t i = 0; i < session.GetOutputCount(); i++)
+    for (std::size_t i = 0; i < session_ptr->GetOutputCount(); i++)
     {
-        output_names.emplace_back(session.GetOutputNameAllocated(i, allocator).get());
-        auto output_shapes = session.GetOutputTypeInfo(i).GetTensorTypeAndShapeInfo().GetShape();
-        std::cout << "\t" << output_names.at(i) << " : " << print_shape(output_shapes) << std::endl;
+        auto output_shapes = session_ptr->GetOutputTypeInfo(i).GetTensorTypeAndShapeInfo().GetShape();
     }
 
     for (int i = 0; i < input_shapes.size(); i++)
@@ -245,38 +274,14 @@ int main(int argc, char **argv)
     // double-check the dimensions of the input tensor
     std::cout << "\ninput_tensor shape: " << print_shape(input_tensors[0].GetTensorTypeAndShapeInfo().GetShape()) << std::endl;
 
-    // pass data through model
-    std::vector<const char *> input_names_char(input_names.size(), nullptr);
-    std::transform(std::begin(input_names), std::end(input_names), std::begin(input_names_char),
-                   [&](const std::string &str)
-                   { return str.c_str(); });
-
-    std::vector<const char *> output_names_char(output_names.size(), nullptr);
-    std::transform(std::begin(output_names), std::end(output_names), std::begin(output_names_char),
-                   [&](const std::string &str)
-                   { return str.c_str(); });
 
     std::cout << "Running model..." << std::endl;
-    try
-    {
-        auto t1 = high_resolution_clock::now();
-        auto output_tensors = session.Run(Ort::RunOptions{nullptr}, input_names_char.data(), input_tensors.data(),
-                                          input_names_char.size(), output_names_char.data(), output_names_char.size());
-        auto t2 = high_resolution_clock::now();
-        auto ms_int = duration_cast<milliseconds>(t2 - t1);
-        std::cout << ms_int.count() << "ms\n";
-        std::cout << "Done!" << std::endl;
-
-        // double-check the dimensions of the output tensors
-        // NOTE: the number of output tensors is equal to the number of output nodes specifed in the Run() call
-        assert(output_tensors.size() == output_names.size() && output_tensors[0].IsTensor());
+    std::chrono::duration<double, std::milli> dur{30};
+    wake_classifier.runModelAsync(input_tensors);
+    for (int i = 0; i < 100 && !wake_classifier.atomic_wait.load(); ++i) {
+        std::this_thread::sleep_for(dur);
     }
-    catch (const Ort::Exception &exception)
-    {
-        std::cout << "ERROR running model inference: " << exception.what() << std::endl;
-        exit(-1);
-    }
-
+    std::cout << "Done." << std::endl;
     // run(params);
 
     return 0;

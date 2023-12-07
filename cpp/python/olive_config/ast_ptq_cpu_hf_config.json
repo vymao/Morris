@@ -12,11 +12,10 @@
                     "split": "validation",
                     "input_cols": ["audio"],
                     "label_cols": ["label"],
-                    "max_samples": 100,
                     "batch_size": 1,
                     "component_kwargs": {
                         "pre_process_data": {
-                            "remap_labels_use_filename": true
+                            "labels_to_filter": ["_silence_"]
                         }
                     }
                 }
@@ -100,7 +99,7 @@
         },
         "evaluator": "common_evaluator",
         "execution_providers": ["CPUExecutionProvider"],
-        "cache_dir": "cache",
+        "cache_dir": "cache_hf",
         "output_dir" : "models/ast_cpu_hf",
         "log_severity_level": 1
     }
