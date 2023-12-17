@@ -2,10 +2,7 @@
 //
 // A very quick-n-dirty implementation serving mainly as a proof of concept.
 //
-#include "lib/util/common_sdl.h"
-#include "lib/util/feature_extractor.h"
-
-#include <onnxruntime_cxx_api.h>
+#include "main/lib/util/common_sdl.h"
 
 #include <cassert>
 #include <cstdio>
@@ -15,7 +12,7 @@
 #include <fstream>
 #include <iostream>
 
-#include "run.h"
+#include "audio_stream.h"
 
 //  500 -> 00:05.000
 // 6000 -> 01:00.000
@@ -31,7 +28,7 @@ std::string to_timestamp(int64_t t) {
     return std::string(buf);
 }
 
-int run(whisper_params params, WakeClassifier& classifier, py::object& extractor) {
+void createAndRunAudioStream(whisper_params& params, std::queue<std::shared_ptr<std::vector<float>>>& classifier_data_queue) {
     params.keep_ms   = std::min(params.keep_ms,   params.step_ms);
     params.length_ms = std::max(params.length_ms, params.step_ms);
 
@@ -53,14 +50,14 @@ int run(whisper_params params, WakeClassifier& classifier, py::object& extractor
     audio_async audio(params.length_ms);
     if (!audio.init(params.capture_id, params.audio_sampling_rate)) {
         fprintf(stderr, "%s: audio.init() failed!\n", __func__);
-        return 1;
+        exit;
     }
 
     audio.resume();
 
-    std::vector<float> pcmf32    (n_samples_30s, 0.0f);
-    std::vector<float> pcmf32_old;
-    std::vector<float> pcmf32_new(n_samples_30s, 0.0f);
+    std::shared_ptr<std::vector<float>> pcmf32 = std::make_shared<std::vector<float>>(n_samples_30s, 0.0f);
+    std::shared_ptr<std::vector<float>> pcmf32_old = std::make_shared<std::vector<float>>();
+    std::shared_ptr<std::vector<float>> pcmf32_new = std::make_shared<std::vector<float>>(n_samples_30s, 0.0f);
 
     // print some info about the processing
     {
@@ -89,15 +86,6 @@ int run(whisper_params params, WakeClassifier& classifier, py::object& extractor
 
     bool is_running = true;
 
-    std::ofstream fout;
-    if (params.fname_out.length() > 0) {
-        fout.open(params.fname_out);
-        if (!fout.is_open()) {
-            fprintf(stderr, "%s: failed to open output file '%s'!\n", __func__, params.fname_out.c_str());
-            return 1;
-        }
-    }
-
     printf("[Start speaking]\n");
     fflush(stdout);
 
@@ -116,15 +104,15 @@ int run(whisper_params params, WakeClassifier& classifier, py::object& extractor
         // process new audio
         {
             while (true) {
-                audio.get(params.step_ms, pcmf32_new);
+                audio.get(params.step_ms, *pcmf32_new);
 
-                if ((int) pcmf32_new.size() > 2*n_samples_step) {
+                if ((int) pcmf32_new->size() > 2*n_samples_step) {
                     fprintf(stderr, "\n\n%s: WARNING: cannot process audio fast enough, dropping audio ...\n\n", __func__);
                     audio.clear();
                     continue;
                 }
 
-                if ((int) pcmf32_new.size() >= n_samples_step) {
+                if ((int) pcmf32_new->size() >= n_samples_step) {
                     audio.clear();
                     break;
                 }
@@ -132,49 +120,30 @@ int run(whisper_params params, WakeClassifier& classifier, py::object& extractor
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
 
-            const int n_samples_new = pcmf32_new.size();
+            const int n_samples_new = pcmf32_new->size();
             std::cout << "n_samples_new: " << n_samples_new << std::endl;
             std::cout << "n_samples_len: " << n_samples_len << std::endl;
             std::cout << "n_samples_keep: " << n_samples_keep << std::endl;
 
             // take up to params.length_ms audio from previous iteration
             const int n_samples_take = 0; //std::min((int) pcmf32_old.size(), std::max(0, n_samples_keep + n_samples_len - n_samples_new));
-            std:: cout << "left: " << (int) pcmf32_old.size() << ", right: " << std::max(0, n_samples_keep + n_samples_len - n_samples_new) << std::endl;
+            std:: cout << "left: " << (int) pcmf32_old->size() << ", right: " << std::max(0, n_samples_keep + n_samples_len - n_samples_new) << std::endl;
 
             //printf("processing: take = %d, new = %d, old = %d\n", n_samples_take, n_samples_new, (int) pcmf32_old.size());
             std::cout << "n_samples_take: " << n_samples_take << std::endl;
-            std::cout << "pcmf32: " << pcmf32.size() << std::endl;
-            pcmf32.resize(n_samples_new + n_samples_take);
+            std::cout << "pcmf32: " << pcmf32->size() << std::endl;
+            pcmf32->resize(n_samples_new + n_samples_take);
 
             for (int i = 0; i < n_samples_take; i++) {
-                pcmf32[i] = pcmf32_old[pcmf32_old.size() - n_samples_take + i];
+                (*pcmf32)[i] = (*pcmf32_old)[pcmf32_old->size() - n_samples_take + i];
             }
 
-            memcpy(pcmf32.data() + n_samples_take, pcmf32_new.data(), n_samples_new*sizeof(float));
+            memcpy(pcmf32->data() + n_samples_take, pcmf32_new->data(), n_samples_new*sizeof(float));
 
             pcmf32_old = pcmf32;
-        } 
-
-        std::vector<Ort::Value> input_tensors = rawAudioToValueVector(pcmf32, extractor);
-
-        // run the inference 
-        {
-            classifier.runModelAsync(input_tensors);
-            ++n_iter;
-
-            if (!use_vad && (n_iter % n_new_line) == 0) {
-                printf("\n");
-
-                // keep part of the audio for next iteration to try to mitigate word boundary issues
-                pcmf32_old = std::vector<float>(pcmf32.end() - n_samples_keep, pcmf32.end());
-
-                // Add tokens of the last full length segment as the prompt
-            }
-            fflush(stdout);
+            classifier_data_queue.push(pcmf32);
         }
     }
 
     audio.pause();
-
-    return 0;
 }

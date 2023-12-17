@@ -13,5 +13,6 @@ cc_library(
         "@python_macos//:python-lib",
         "@onnx_runtime//:onnx_runtime",
         "//main/lib/util:feature_extractor",
+        "//main/lib/util:common",
     ]
 )

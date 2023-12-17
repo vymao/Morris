@@ -1,9 +1,12 @@
 .vscode/*
 *egg-info*
+
+# Bazel 
 **bazel-bin**
 **bazel-out**
 **bazel-cpp**
 **bazel-testlogs**
+**lock
 
 # Traced PyTorch models
 **.pt
@@ -15,3 +18,4 @@ cpp/python/cache*
 
 # Pycache
 **/__pycache__/**
+

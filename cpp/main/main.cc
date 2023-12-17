@@ -2,8 +2,6 @@
 //
 // A very quick-n-dirty implementation serving mainly as a proof of concept.
 //
-#include "whisper.h"
-
 #include <onnxruntime_cxx_api.h>
 
 #include <pybind11/embed.h> 
@@ -22,10 +20,11 @@
 #include <filesystem>
 #include <chrono>
 #include <thread>
+#include <queue>
 
-#include "run.h"
 #include "lib/util/feature_extractor.h"
 #include "lib/wake-classifier/wake_classifier.h"
+#include "lib/audio-streamer/audio_stream.h"
 
 using std::chrono::high_resolution_clock;
 using std::chrono::duration_cast;
@@ -54,6 +53,10 @@ bool whisper_params_parse(int argc, char **argv, whisper_params &params)
         else if (arg == "-t" || arg == "--threads")
         {
             params.n_threads = std::stoi(argv[++i]);
+        }
+        else if (arg == "-sr" || arg == "--audio-samplerate")
+        {
+            params.audio_sampling_rate = std::stoi(argv[++i]);
         }
         else if (arg == "--step")
         {
@@ -151,6 +154,7 @@ void whisper_print_usage(int /*argc*/, char **argv, const whisper_params &params
     fprintf(stderr, "options:\n");
     fprintf(stderr, "  -h,       --help          [default] show this help message and exit\n");
     fprintf(stderr, "  -t N,     --threads N     [%-7d] number of threads to use during computation\n", params.n_threads);
+    fprintf(stderr, "  -sr N,    --audio-samplerate [%-7d] sample rate for audio\n", params.audio_sampling_rate);
     fprintf(stderr, "            --step N        [%-7d] audio step size in milliseconds\n", params.step_ms);
     fprintf(stderr, "            --length N      [%-7d] audio length in milliseconds\n", params.length_ms);
     fprintf(stderr, "            --keep N        [%-7d] audio to keep from previous step in ms\n", params.keep_ms);
@@ -173,16 +177,6 @@ void whisper_print_usage(int /*argc*/, char **argv, const whisper_params &params
     fprintf(stderr, "\n");
 }
 
-// pretty prints a shape dimension vector
-std::string print_shape(const std::vector<std::int64_t> &v)
-{
-    std::stringstream ss("");
-    for (std::size_t i = 0; i < v.size() - 1; i++)
-        ss << v[i] << "x";
-    ss << v[v.size() - 1];
-    return ss.str();
-}
-
 int main(int argc, char **argv)
 {
     whisper_params params;
@@ -191,8 +185,6 @@ int main(int argc, char **argv)
     {
         return 1;
     }
-
-    std::cout << "Check" << std::endl;
 
     const int thread_pool_size = std::thread::hardware_concurrency();
     std::cout << "Threads: " << thread_pool_size << std::endl;
@@ -207,7 +199,7 @@ int main(int argc, char **argv)
     OrtThreadingOptions* thread_opts = nullptr;
     const OrtApi* g_ort = OrtGetApiBase()->GetApi(ORT_API_VERSION);
     g_ort->CreateThreadingOptions(&thread_opts);
-    g_ort->SetGlobalIntraOpNumThreads(thread_opts, thread_pool_size);
+    g_ort->SetGlobalIntraOpNumThreads(thread_opts, 4);
     g_ort->CreateEnvWithGlobalThreadPools(ORT_LOGGING_LEVEL_WARNING, "onnx_global_threadpool", thread_opts, &environment);
 
     OrtArenaCfg* arena_cfg = nullptr;
@@ -229,11 +221,14 @@ int main(int argc, char **argv)
 
     //Ort::ThrowOnError(RegisterCustomOps(static_cast<OrtSessionOptions*>(session_options), OrtGetApiBase()));
     std::shared_ptr<Ort::Session> session_ptr = std::make_shared<Ort::Session>(env, params.model.c_str(), session_options);
+
+    auto output_shapes = session_ptr->GetOutputTypeInfo(0).GetTensorTypeAndShapeInfo().GetShape();
+    std::cout << "Output shapes: " << print_shape(output_shapes) << std::endl;
  
 
     std::shared_ptr<Ort::AllocatorWithDefaultOptions> allocator_ptr = std::make_shared<Ort::AllocatorWithDefaultOptions>();
 
-    WakeClassifier wake_classifier = WakeClassifier("MIT/ast-finetuned-speech-commands-v2", session_ptr, allocator_ptr);
+    WakeClassifier wake_classifier = WakeClassifier("MIT/ast-finetuned-speech-commands-v2", session_ptr, allocator_ptr, extractor);
 
     std::vector<std::int64_t> input_shapes;
     for (std::size_t i = 0; i < session_ptr->GetInputCount(); i++)
@@ -253,13 +248,22 @@ int main(int argc, char **argv)
         input_shapes[i] = abs(input_shapes[i]);
     }
 
-    std::cout << "Generating " << input_shapes.back() << " numbers..." << std::endl;
+    //////////
+
+    std::queue<std::shared_ptr<std::vector<float>>> data_queue;
+    std::queue<std::shared_ptr<std::vector<Ort::Value>>> classifier_data_queue;
+    std::queue<std::shared_ptr<std::vector<Ort::Value>>> classifier_out;
+    
+    std::thread audio_stream_t(createAndRunAudioStream, std::ref(params), std::ref(data_queue));
+
+
+    //std::cout << "Generating " << input_shapes.back() << " numbers..." << std::endl;
     // generate random numbers in the range [0, 255]
-    int total_number_elements = 93680;
-    std::vector<float> input_tensor_values(total_number_elements);
-    std::generate(input_tensor_values.begin(), input_tensor_values.end(), [&]
-                  { return rand() % 255; });
-    std::cout << "Generated." << std::endl;
+    //int total_number_elements = 93680;
+    //std::vector<float> input_tensor_values(total_number_elements);
+    //std::generate(input_tensor_values.begin(), input_tensor_values.end(), [&]
+    //              { return rand() % 255; });
+    //std::cout << "Generated." << std::endl;
     //Matrix data {input_tensor_values};
     //py::buffer_info data_buffer = getBufferInfoForMatrix(data);
     //std::cout << "Creating pybind11 array..." << std::endl;
@@ -268,21 +272,29 @@ int main(int argc, char **argv)
 
     //float *carray = rdata.mutable_data();
 
+    while (true) {
+        if (!data_queue.empty()) {
+            std::cout << "Preparing inputs..." << std::endl;
+            std::shared_ptr<std::vector<float>> data = data_queue.front();
+            classifier_data_queue.push(wake_classifier.prepareInputs(*data));
+            data_queue.pop();
+            std::cout << "Done" << std::endl;
+        }
 
-    std::vector<Ort::Value> input_tensors = rawAudioToValueVector(input_tensor_values, extractor);
+        if (!classifier_data_queue.empty() && !wake_classifier.atomic_wait.load()) {
+            std::shared_ptr<std::vector<Ort::Value>> ort_outputs = std::make_shared<std::vector<Ort::Value>>();
+            ort_outputs->emplace_back(Ort::Value{nullptr});
+            //wake_classifier.runModelSync(input_tensors);
+            wake_classifier.runModelAsync(*ort_outputs, classifier_data_queue);
+            classifier_out.push(ort_outputs);
 
-    // double-check the dimensions of the input tensor
-    std::cout << "\ninput_tensor shape: " << print_shape(input_tensors[0].GetTensorTypeAndShapeInfo().GetShape()) << std::endl;
-
-
-    std::cout << "Running model..." << std::endl;
-    std::chrono::duration<double, std::milli> dur{30};
-    wake_classifier.runModelAsync(input_tensors);
-    for (int i = 0; i < 100 && !wake_classifier.atomic_wait.load(); ++i) {
-        std::this_thread::sleep_for(dur);
+        } else {
+            std::chrono::duration<double, std::milli> dur{50};
+            std::this_thread::sleep_for(dur);
+        }
     }
-    std::cout << "Done." << std::endl;
+    std::cout << "End." << std::endl;
     // run(params);
-
+    audio_stream_t.join();
     return 0;
 }

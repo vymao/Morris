@@ -55,17 +55,19 @@ def extra_bazel_deps():
         ],
     )
 
+    http_archive(
+        name = "rules_python",
+        sha256 = "9d04041ac92a0985e344235f5d946f71ac543f1b1565f2cdbc9a2aaee8adf55b",
+        strip_prefix = "rules_python-0.26.0",
+        url = "https://github.com/bazelbuild/rules_python/releases/download/0.26.0/rules_python-0.26.0.tar.gz",
+    )
+
+def sdl():
     new_git_repository(
         name = "com_github_libsdl_sdl2",
         remote = "https://github.com/libsdl-org/SDL.git",
         build_file = Label("//external:BUILD.sdl2"),
         tag = "release-2.28.5",
-    )
-
-    git_repository(
-        name = "rules_python",
-        remote = "https://github.com/bazelbuild/rules_python.git",
-        tag = "0.26.0",
     )
 
 def onnx():
@@ -296,12 +298,3 @@ def torch_deps():
         remote = "https://github.com/intel/ideep.git",
         commit = "d6860c477c99f1fce9e28eb206891af3c0e1a1d7",
     )
-
-def _data_deps_extension_impl(_):
-    whisper()
-    extra_bazel_deps()
-    #torch()
-
-data_deps_ext = module_extension(
-    implementation = _data_deps_extension_impl,
-)

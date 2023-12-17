@@ -1,27 +1,19 @@
-#include <onnxruntime_cxx_api.h>
-#include "lib/wake-classifier/wake_classifier.h"
-
 #include <cassert>
 #include <cstdio>
 #include <string>
 #include <thread>
-#include <vector>
 #include <fstream>
 #include <iostream>
+#include <sstream>
 
-#include <pybind11/embed.h> 
-#include <pybind11/pybind11.h>
-#include <pybind11/numpy.h>
-#include <pybind11/stl.h>
-
-namespace py = pybind11;
+#include "onnxruntime_cxx_api.h"
 
 struct whisper_params {
     int32_t n_threads  = std::min(4, (int32_t) std::thread::hardware_concurrency());
     int32_t step_ms    = 3000;
     int32_t length_ms  = 10000;
     int32_t keep_ms    = 200;
-    int32_t capture_id = -1;
+    int32_t capture_id = 1;
     int32_t max_tokens = 32;
     int32_t audio_ctx  = 0;
     int32_t audio_sampling_rate = 16000;
@@ -44,4 +36,5 @@ struct whisper_params {
     std::string fname_out;
 };
 
-int run(whisper_params params, WakeClassifier& classifier, py::object& extractor);
+std::string print_shape(const std::vector<std::int64_t> &v);
+int ortValueToTorchAndArgmax(Ort::Value& value_tensor);

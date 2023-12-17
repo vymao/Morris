@@ -17,16 +17,35 @@ cc_binary(
     srcs = ["main.cc"],
     copts = COPTS,
     deps = [
+        "@onnx_runtime//:onnx_runtime",
+        #"@onnx_runtime_extensions//:headers",
+        "//main/lib/util:feature_extractor",
+        "//main/lib/wake-classifier:wake_classifier",
+        "//main/lib/audio-streamer:audio_stream",
+        "//main/lib/util:common",
+        "//main/lib/util:sdl",
+        "@pybind11//:pybind11_embed",
+        "@pybind11",
+        "@python_macos//:python-lib",
+    ]
+)
+
+cc_binary(
+    name = "main2",
+    srcs = ["main_2_new.cc"],
+    copts = COPTS,
+    deps = [
         "@com_github_ggerganov_whisper//:whisper",
         "@com_github_libsdl_sdl2//:include",
         "@onnx_runtime//:onnx_runtime",
         #"@onnx_runtime_extensions//:headers",
         "//main/lib/util:feature_extractor",
         "//main/lib/wake-classifier:wake_classifier",
+        "//main/lib/audio-streamer:audio_stream",
+        "//main/lib/util:common",
         "@pybind11//:pybind11_embed",
         "@pybind11",
         "@python_macos//:python-lib",
-        ":run"
     ]
 )
 
@@ -35,11 +54,7 @@ cc_library(
     srcs = ["run.cc"],
     hdrs = ["run.h"],
     deps = [
-        "@com_github_ggerganov_whisper//:whisper",
-        "@com_github_ggerganov_whisper//:common",
-        "@com_github_ggerganov_whisper//:common-sdl",
-        "@com_github_libsdl_sdl2//:include",
-        "@com_github_ggerganov_whisper//:ggml",
+        "//main/lib/util:sdl",
         "@libtorch//:torch_cpu",
         "@onnx_runtime//:onnx_runtime"
     ]
