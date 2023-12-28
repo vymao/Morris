@@ -1,5 +1,7 @@
 load("@rules_foreign_cc//foreign_cc:defs.bzl", "cmake", "boost_build", "ninja")
 
+package(default_visibility = ["//visibility:public"])
+
 filegroup(
     name = "all_srcs",
     srcs = glob(["**"]),
@@ -12,3 +14,31 @@ cc_library(
     visibility = ["//visibility:public"],
 )
 
+COPTS = [
+    "-DOCOS_ENABLE_VISION=OFF",
+    "-DOCOS_ENABLE_CV2=OFF",
+    "-DOCOS_ENABLE_OPENCV_CODECS=OFF",
+]
+
+cmake(
+    name = "onnx_runtime_ext",
+    build_args = [
+        "--verbose",
+    ],
+    cache_entries = {
+        "CMAKE_OSX_ARCHITECTURES": "x86_64;arm64",
+        "CMAKE_OSX_DEPLOYMENT_TARGET": "13.5",
+        "OCOS_ONNXRUNTIME_VERSION": "1.16.2",
+        "OCOS_ENABLE_OPENCV_CODECS": "OFF",
+        "OCOS_ENABLE_VISION": "OFF",
+        "OCOS_ENABLE_CV2": "OFF",
+    },
+    lib_source = ":all_srcs",
+    out_shared_libs = [
+        "libortextensions.dylib",
+        "libortextensions.0.dylib",
+        "libortextensions.0.9.0.dylib"
+    ],
+    copts = COPTS,
+    tags = ["requires-network"],
+)

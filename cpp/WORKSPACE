@@ -1,6 +1,6 @@
 workspace(name = "morris")
 
-load("//:deps.bzl", "whisper", "extra_bazel_deps", "libtorch", "onnx", "pybind", "sdl")
+load("//:deps.bzl", "whisper", "extra_bazel_deps", "extra_tools", "libtorch", "onnx", "pybind", "sdl")
 load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository", "new_git_repository")
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
@@ -25,6 +25,8 @@ onnx()
 pybind()
 load("@pybind11_bazel//:python_configure.bzl", "python_configure")
 python_configure(name = "local_config_python")
+
+extra_tools()
 
 '''new_local_repository(
     name = "libtorch_archive",

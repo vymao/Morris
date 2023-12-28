@@ -6,7 +6,11 @@
 #include <iostream>
 #include <sstream>
 
+#include <nlohmann/json.hpp>
+
 #include "onnxruntime_cxx_api.h"
+
+using json = nlohmann::json;
 
 struct whisper_params {
     int32_t n_threads  = std::min(4, (int32_t) std::thread::hardware_concurrency());
@@ -32,9 +36,13 @@ struct whisper_params {
     bool use_gpu       = true;
 
     std::string language  = "en";
-    std::string model     = "models/ggml-base.en.bin";
+    std::string classifier_model     = "";
+    std::string transcriber_model    = "";
     std::string fname_out;
 };
 
 std::string print_shape(const std::vector<std::int64_t> &v);
+
 int ortValueToTorchAndArgmax(Ort::Value& value_tensor);
+
+json parseJSON(std::string file);

@@ -15,7 +15,9 @@
 cpp/main/models/
 cpp/python/models/
 cpp/python/cache*
+**onnx
 
 # Pycache
 **/__pycache__/**
+
 

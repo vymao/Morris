@@ -1,4 +1,5 @@
 #include "common.h"
+#include <fstream>
 #include "torch/torch.h"
 
 std::string print_shape(const std::vector<std::int64_t> &v)
@@ -18,3 +19,9 @@ int ortValueToTorchAndArgmax(Ort::Value& value_tensor) {
         options);
     return torch_tensor.argmax(-1).item().toInt();
 }
+
+json parseJSON(std::string file) {
+    std::ifstream f(file);
+    json data = json::parse(f);
+    return data;
+};

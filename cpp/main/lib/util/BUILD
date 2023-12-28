@@ -39,5 +39,6 @@ cc_library(
     deps = [
         "@libtorch//:torch_cpu",
         "@onnx_runtime//:onnx_runtime",
+        "@nlohmann_json//:json"
     ]
 )

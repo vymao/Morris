@@ -18,9 +18,11 @@ cc_binary(
     copts = COPTS,
     deps = [
         "@onnx_runtime//:onnx_runtime",
-        #"@onnx_runtime_extensions//:headers",
+        "@onnx_runtime_extensions//:onnx_runtime_ext",
+        "@onnx_runtime_extensions//:headers",
         "//main/lib/util:feature_extractor",
         "//main/lib/wake-classifier:wake_classifier",
+        "//main/lib/audio-transcriber:audio_transcriber",
         "//main/lib/audio-streamer:audio_stream",
         "//main/lib/util:common",
         "//main/lib/util:sdl",

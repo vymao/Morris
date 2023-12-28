@@ -4,9 +4,9 @@ load("@rules_cc//cc:defs.bzl", "cc_library")
 package(default_visibility = ["//visibility:public"])
 
 cc_library(
-    name = "wake_classifier",
-    srcs = ["wake_classifier.cc"],
-    hdrs = ["wake_classifier.h"],
+    name = "model_base",
+    srcs = ["model_base.cc"],
+    hdrs = ["model_base.h"],
     deps = [
         "@pybind11//:pybind11_embed",
         "@pybind11",
@@ -14,6 +14,5 @@ cc_library(
         "@onnx_runtime//:onnx_runtime",
         "//main/lib/util:feature_extractor",
         "//main/lib/util:common",
-        "//main/lib/model:model_base"
     ]
 )

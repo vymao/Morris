@@ -3,6 +3,7 @@
 // A very quick-n-dirty implementation serving mainly as a proof of concept.
 //
 #include <onnxruntime_cxx_api.h>
+#include <onnxruntime_extensions.h>
 
 #include <pybind11/embed.h> 
 #include <pybind11/pybind11.h>
@@ -21,10 +22,14 @@
 #include <chrono>
 #include <thread>
 #include <queue>
+#include <variant>
+#include <unordered_map>
 
 #include "lib/util/feature_extractor.h"
 #include "lib/wake-classifier/wake_classifier.h"
+#include "lib/audio-transcriber/audio_transcriber.h"
 #include "lib/audio-streamer/audio_stream.h"
+#include "lib/model/model_base.h"
 
 using std::chrono::high_resolution_clock;
 using std::chrono::duration_cast;
@@ -114,9 +119,13 @@ bool whisper_params_parse(int argc, char **argv, whisper_params &params)
         {
             params.language = argv[++i];
         }
-        else if (arg == "-m" || arg == "--model")
+        else if (arg == "-cm" || arg == "--class_model")
         {
-            params.model = argv[++i];
+            params.classifier_model = argv[++i];
+        }
+        else if (arg == "-tm" || arg == "--trans_model")
+        {
+            params.transcriber_model = argv[++i];
         }
         else if (arg == "-f" || arg == "--file")
         {
@@ -151,6 +160,7 @@ void whisper_print_usage(int /*argc*/, char **argv, const whisper_params &params
     fprintf(stderr, "\n");
     fprintf(stderr, "usage: %s [options]\n", argv[0]);
     fprintf(stderr, "\n");
+
     fprintf(stderr, "options:\n");
     fprintf(stderr, "  -h,       --help          [default] show this help message and exit\n");
     fprintf(stderr, "  -t N,     --threads N     [%-7d] number of threads to use during computation\n", params.n_threads);
@@ -169,7 +179,8 @@ void whisper_print_usage(int /*argc*/, char **argv, const whisper_params &params
     fprintf(stderr, "  -ps,      --print-special [%-7s] print special tokens\n", params.print_special ? "true" : "false");
     fprintf(stderr, "  -kc,      --keep-context  [%-7s] keep context between audio chunks\n", params.no_context ? "false" : "true");
     fprintf(stderr, "  -l LANG,  --language LANG [%-7s] spoken language\n", params.language.c_str());
-    fprintf(stderr, "  -m FNAME, --model FNAME   [%-7s] model path\n", params.model.c_str());
+    fprintf(stderr, "  -cm FNAME, --class_model FNAME   [%-7s] model path\n", params.classifier_model.c_str());
+    fprintf(stderr, "  -tm FNAME, --trans_model FNAME   [%-7s] model path\n", params.transcriber_model.c_str());
     fprintf(stderr, "  -f FNAME, --file FNAME    [%-7s] text output file name\n", params.fname_out.c_str());
     fprintf(stderr, "  -tdrz,    --tinydiarize   [%-7s] enable tinydiarize (requires a tdrz model)\n", params.tinydiarize ? "true" : "false");
     fprintf(stderr, "  -sa,      --save-audio    [%-7s] save the recorded audio to a file\n", params.save_audio ? "true" : "false");
@@ -189,12 +200,23 @@ int main(int argc, char **argv)
     const int thread_pool_size = std::thread::hardware_concurrency();
     std::cout << "Threads: " << thread_pool_size << std::endl;
 
+    std::cout << "Initializing Python interpreter...";
     py::scoped_interpreter guard{};
+    std::cout << "done." << std::endl;
+
+    std::cout << "Creating feature extractors...";
     py::module_ transformers_module = py::module_::import("transformers");
+
     py::object AutoFeatureExtractor = py::getattr(transformers_module, "AutoFeatureExtractor");
-    py::object extractor = AutoFeatureExtractor.attr("from_pretrained")("MIT/ast-finetuned-speech-commands-v2");
+    py::object classifier_extractor = AutoFeatureExtractor.attr("from_pretrained")("MIT/ast-finetuned-speech-commands-v2");
 
+    py::object AutoProcessor = py::getattr(transformers_module, "AutoProcessor");
+    py::object transcriber_extractor = AutoProcessor.attr("from_pretrained")("openai/whisper-base.en");
+    std::cout << "done." << std::endl;
 
+    std::cout << std::filesystem::current_path() << std::endl;
+
+    std::cout << "Creating ONNX environment and sessions...";
     OrtEnv* environment;
     OrtThreadingOptions* thread_opts = nullptr;
     const OrtApi* g_ort = OrtGetApiBase()->GetApi(ORT_API_VERSION);
@@ -219,78 +241,84 @@ int main(int argc, char **argv)
     Ort::Env env = Ort::Env(environment);
     env.UpdateEnvWithCustomLogLevel(ORT_LOGGING_LEVEL_WARNING);
 
-    //Ort::ThrowOnError(RegisterCustomOps(static_cast<OrtSessionOptions*>(session_options), OrtGetApiBase()));
-    std::shared_ptr<Ort::Session> session_ptr = std::make_shared<Ort::Session>(env, params.model.c_str(), session_options);
-
-    auto output_shapes = session_ptr->GetOutputTypeInfo(0).GetTensorTypeAndShapeInfo().GetShape();
-    std::cout << "Output shapes: " << print_shape(output_shapes) << std::endl;
- 
+    Ort::ThrowOnError(RegisterCustomOps(static_cast<OrtSessionOptions*>(session_options), OrtGetApiBase()));
+    std::shared_ptr<Ort::Session> classifier_session_ptr;
+    std::shared_ptr<Ort::Session> transcriber_session_ptr;
+    if (!params.classifier_model.size() && !params.transcriber_model.size()) {
+        std::cerr << "At least one model must be specified.";
+        exit(1);
+    }
 
     std::shared_ptr<Ort::AllocatorWithDefaultOptions> allocator_ptr = std::make_shared<Ort::AllocatorWithDefaultOptions>();
-
-    WakeClassifier wake_classifier = WakeClassifier("MIT/ast-finetuned-speech-commands-v2", session_ptr, allocator_ptr, extractor);
-
-    std::vector<std::int64_t> input_shapes;
-    for (std::size_t i = 0; i < session_ptr->GetInputCount(); i++)
-    {
-        input_shapes = session_ptr->GetInputTypeInfo(i).GetTensorTypeAndShapeInfo().GetShape();
+    
+    std::unordered_map<std::string, std::shared_ptr<AudioModelBase>> models;
+    if (params.classifier_model.size()) {
+        std::shared_ptr<Ort::Session> classifier_session_ptr = std::make_shared<Ort::Session>(env, params.classifier_model.c_str(), session_options);
+        std::shared_ptr<WakeClassifier> wake_classifier = std::make_shared<WakeClassifier>("MIT/ast-finetuned-speech-commands-v2", classifier_session_ptr, allocator_ptr, classifier_extractor);
+        models["classifier"] = wake_classifier;
     }
 
-    // print name/shape of outputs
-    std::vector<std::string> output_names;
-    for (std::size_t i = 0; i < session_ptr->GetOutputCount(); i++)
-    {
-        auto output_shapes = session_ptr->GetOutputTypeInfo(i).GetTensorTypeAndShapeInfo().GetShape();
+    std::vector<std::variant<int32_t, float>> additional_args = {20, 0, 2, 1, 1.0f, 1.0f};
+    if (params.transcriber_model.size()) {
+        std::shared_ptr<Ort::Session> transcriber_session_ptr = std::make_shared<Ort::Session>(env, params.transcriber_model.c_str(), session_options);
+        std::shared_ptr<AudioTranscriber> audio_transcriber = std::make_shared<AudioTranscriber>(
+                    "openai/whisper-base.en", 
+                    transcriber_session_ptr, 
+                    allocator_ptr, 
+                    transcriber_extractor,
+                    additional_args
+                    );
+        models["transcriber"] = audio_transcriber;
     }
 
-    for (int i = 0; i < input_shapes.size(); i++)
-    {
-        input_shapes[i] = abs(input_shapes[i]);
+    std::cout << "done." << std::endl;
+
+    for (auto const& [model_name, model] : models) {
+        std::cout << "Inputs" << std::endl;
+        for (std::size_t i = 0; i < model->getSession()->GetInputCount(); i++) {
+            auto input_name = model->input_names[i];
+            auto input_shapes = model->getSession()->GetInputTypeInfo(i).GetTensorTypeAndShapeInfo().GetShape();
+            std::cout << "\t" << input_name << " : " << print_shape(input_shapes) << std::endl;
+        }
+
+        std::cout << "Outputs" << std::endl;
+        for (std::size_t i = 0; i < model->getSession()->GetOutputCount(); i++) {
+            auto output_name = model->output_names[i];
+            auto output_shapes = model->getSession()->GetOutputTypeInfo(i).GetTensorTypeAndShapeInfo().GetShape();
+            std::cout << "\t" << output_name << " : " << print_shape(output_shapes) << std::endl;
+        }
     }
 
     //////////
 
     std::queue<std::shared_ptr<std::vector<float>>> data_queue;
-    std::queue<std::shared_ptr<std::vector<Ort::Value>>> classifier_data_queue;
     std::queue<std::shared_ptr<std::vector<Ort::Value>>> classifier_out;
     
     std::thread audio_stream_t(createAndRunAudioStream, std::ref(params), std::ref(data_queue));
-
-
-    //std::cout << "Generating " << input_shapes.back() << " numbers..." << std::endl;
-    // generate random numbers in the range [0, 255]
-    //int total_number_elements = 93680;
-    //std::vector<float> input_tensor_values(total_number_elements);
-    //std::generate(input_tensor_values.begin(), input_tensor_values.end(), [&]
-    //              { return rand() % 255; });
-    //std::cout << "Generated." << std::endl;
-    //Matrix data {input_tensor_values};
-    //py::buffer_info data_buffer = getBufferInfoForMatrix(data);
-    //std::cout << "Creating pybind11 array..." << std::endl;
-    //py::array_t<float> data_buffer = getFloatArrayforMatrix(data);
-    //std::cout << "Done" << std::endl;
-
-    //float *carray = rdata.mutable_data();
 
     while (true) {
         if (!data_queue.empty()) {
             std::cout << "Preparing inputs..." << std::endl;
             std::shared_ptr<std::vector<float>> data = data_queue.front();
-            classifier_data_queue.push(wake_classifier.prepareInputs(*data));
+            for (auto& model : models) {
+                model.second->prepareInputsAndPush(*data);
+            }
             data_queue.pop();
             std::cout << "Done" << std::endl;
         }
 
-        if (!classifier_data_queue.empty() && !wake_classifier.atomic_wait.load()) {
-            std::shared_ptr<std::vector<Ort::Value>> ort_outputs = std::make_shared<std::vector<Ort::Value>>();
-            ort_outputs->emplace_back(Ort::Value{nullptr});
-            //wake_classifier.runModelSync(input_tensors);
-            wake_classifier.runModelAsync(*ort_outputs, classifier_data_queue);
-            classifier_out.push(ort_outputs);
-
-        } else {
-            std::chrono::duration<double, std::milli> dur{50};
-            std::this_thread::sleep_for(dur);
+        for (auto& item : models) {
+            std::shared_ptr<AudioModelBase> model = item.second;
+            if (model->isReadyForRun()) {
+                std::shared_ptr<std::vector<Ort::Value>> ort_outputs = std::make_shared<std::vector<Ort::Value>>();
+                ort_outputs->emplace_back(Ort::Value{nullptr});
+                //wake_classifier.runModelSync(input_tensors);
+                model->runModelAsync(*ort_outputs);
+                classifier_out.push(ort_outputs);
+            } else {
+                std::chrono::duration<double, std::milli> dur{50};
+                std::this_thread::sleep_for(dur);
+            }
         }
     }
     std::cout << "End." << std::endl;

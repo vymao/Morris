@@ -36,6 +36,14 @@ def whisper():
         commit = "7eb6db89e59a1397584d147ad2bc63e89f613d81",
     )
 
+def extra_tools():
+    maybe(
+        git_repository,
+        name = "nlohmann_json",
+        remote = "https://github.com/nlohmann/json.git",
+        tag = "v3.11.3"
+    )
+
 def extra_bazel_deps():
     maybe(
         http_archive,
@@ -79,6 +87,14 @@ def onnx():
         urls = ["https://github.com/microsoft/onnxruntime/releases/download/v1.16.2/onnxruntime-osx-x86_64-1.16.2.tgz"],
         build_file = Label("//external:BUILD.onnx_runtime"),
     )
+
+    #new_git_repository(
+    #    name = "onnx_runtime_extensions",
+    #    build_file = "//external:BUILD.onnx_runtime_extensions",
+    #    remote = "https://github.com/microsoft/onnxruntime-extensions",
+    #    commit = "81e7799c69044c745239202085eb0a98f102937b",
+    #    patches=["//external:onnx_ext.patch"],
+    #)
 
     maybe(
         new_git_repository,
