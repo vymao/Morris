@@ -23,28 +23,10 @@ cc_binary(
         "//main/lib/util:feature_extractor",
         "//main/lib/wake-classifier:wake_classifier",
         "//main/lib/audio-transcriber:audio_transcriber",
+        "//main/lib/model:model_base",
         "//main/lib/audio-streamer:audio_stream",
         "//main/lib/util:common",
         "//main/lib/util:sdl",
-        "@pybind11//:pybind11_embed",
-        "@pybind11",
-        "@python_macos//:python-lib",
-    ]
-)
-
-cc_binary(
-    name = "main2",
-    srcs = ["main_2_new.cc"],
-    copts = COPTS,
-    deps = [
-        "@com_github_ggerganov_whisper//:whisper",
-        "@com_github_libsdl_sdl2//:include",
-        "@onnx_runtime//:onnx_runtime",
-        #"@onnx_runtime_extensions//:headers",
-        "//main/lib/util:feature_extractor",
-        "//main/lib/wake-classifier:wake_classifier",
-        "//main/lib/audio-streamer:audio_stream",
-        "//main/lib/util:common",
         "@pybind11//:pybind11_embed",
         "@pybind11",
         "@python_macos//:python-lib",

@@ -32,6 +32,7 @@ AudioModelBase::AudioModelBase(
     output_names_arrays = getInputOrOutputNameArray(output_names);
 
     caller_tid = std::this_thread::get_id();
+    has_secondary_data_queue = false;
 }
 
 AudioModelBase::~AudioModelBase() {};

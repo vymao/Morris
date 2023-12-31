@@ -17,6 +17,7 @@ struct whisper_params {
     int32_t step_ms    = 3000;
     int32_t length_ms  = 10000;
     int32_t keep_ms    = 200;
+    int32_t layer_multiplier = 4;
     int32_t capture_id = 1;
     int32_t max_tokens = 32;
     int32_t audio_ctx  = 0;

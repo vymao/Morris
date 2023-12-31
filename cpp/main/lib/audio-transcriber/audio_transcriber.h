@@ -11,6 +11,7 @@
 #include <thread>
 #include <atomic>
 #include <mutex>
+#include <deque>
 
 #include <onnxruntime_cxx_api.h>
 
@@ -29,17 +30,26 @@ public:
         std::shared_ptr<Ort::Session> new_session,
         std::shared_ptr<Ort::AllocatorWithDefaultOptions> global_allocator,
         py::object &extractor,
+        const int32_t layered_multiplier,
+        const bool use_layered_transcription,
+        const bool use_realtime_transription,
         const std::vector<std::variant<int32_t, float>>& model_args);
-    void runModelAsync(std::vector<Ort::Value> &output_values);
+    void runModelAsync();
     void runModelAsync(std::vector<Ort::Value> &input_tensors, 
         std::vector<Ort::Value> &output_values);
     static void mainRunCallback(void *user_data, OrtValue **outputs, size_t num_outputs, OrtStatusPtr status_ptr);
+    static void layeredRunCallback(void *obj, OrtValue **outputs, size_t num_outputs, OrtStatusPtr status_ptr);
     std::shared_ptr<std::vector<Ort::Value>> prepareInputs(std::vector<float> &input_values);
-    void prepareInputsAndPush(std::vector<float> &input_values);
+    void prepareInputsAndPush(std::shared_ptr<std::vector<float>> input_values);
     bool isReadyForRun();
+    std::string getLayeredOutput();
+    std::string getTotalOutput();
 
-    static std::atomic_bool atomic_wait;
-    std::queue<std::string> out_queue;
+    static std::atomic_bool realtime_atomic_wait;
+    static std::atomic_bool layered_atomic_wait;
+    std::deque<std::string> realtime_out_queue;
+    std::queue<std::string> layered_out_queue;
+    static std::string layered_string_out;
 private:
     std::vector<std::variant<int, float>> add_args;
     std::vector<ONNXTensorElementDataType> arg_types;
@@ -47,9 +57,15 @@ private:
     int start_of_prev_id;
     int start_of_transcript_id;
     int end_of_text_id;
+    bool use_layered;
+    bool use_realtime;
+    int32_t multiplier;
+    std::queue<std::shared_ptr<std::vector<float>>> layered_data_queue;
+    std::queue<std::shared_ptr<std::vector<Ort::Value>>> layered_data_value_queue;
+    std::queue<std::shared_ptr<std::vector<Ort::Value>>> layered_out_value_queue;
 
 
-    void postProcess(Ort::Value& value);
+    std::string postProcess(Ort::Value& value);
     bool isSpecialToken(int id);
     std::string processIDstoToken(std::vector<int>& ids, bool skip_special_tokens);
     std::shared_ptr<std::vector<Ort::Value>> audioToValueVector(std::vector<float> &float_vector, py::object &extractor);

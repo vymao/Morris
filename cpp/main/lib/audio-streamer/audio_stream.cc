@@ -55,7 +55,6 @@ void createAndRunAudioStream(whisper_params& params, std::queue<std::shared_ptr<
 
     audio.resume();
 
-    std::shared_ptr<std::vector<float>> pcmf32 = std::make_shared<std::vector<float>>(n_samples_30s, 0.0f);
     std::shared_ptr<std::vector<float>> pcmf32_old = std::make_shared<std::vector<float>>();
     std::shared_ptr<std::vector<float>> pcmf32_new = std::make_shared<std::vector<float>>(n_samples_30s, 0.0f);
 
@@ -103,6 +102,7 @@ void createAndRunAudioStream(whisper_params& params, std::queue<std::shared_ptr<
 
         // process new audio
         {
+            std::shared_ptr<std::vector<float>> pcmf32 = std::make_shared<std::vector<float>>(n_samples_30s, 0.0f);
             while (true) {
                 audio.get(params.step_ms, *pcmf32_new);
 

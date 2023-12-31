@@ -25,6 +25,7 @@ using std::chrono::milliseconds;
 
 
 std::atomic_bool WakeClassifier::atomic_wait = false;
+std::atomic_bool WakeClassifier::wakeup = false;
 
 WakeClassifier::WakeClassifier(
     std::string model,
@@ -56,20 +57,24 @@ std::shared_ptr<std::vector<Ort::Value>> WakeClassifier::prepareInputs(std::vect
     return audioToValueVector(input_values, feature_extractor);
 }
 
-void WakeClassifier::prepareInputsAndPush(std::vector<float> &input_values) {
-    data_queue.push(audioToValueVector(input_values, feature_extractor));
+void WakeClassifier::prepareInputsAndPush(std::shared_ptr<std::vector<float>> input_values) {
+    data_queue.push(audioToValueVector(*input_values, feature_extractor));
 }
 
 bool WakeClassifier::isReadyForRun() {
     return !data_queue.empty() && !atomic_wait.load();
 }
 
-void WakeClassifier::runModelAsync(std::vector<Ort::Value> &output_values)
+void WakeClassifier::runModelAsync()
 {
+    std::shared_ptr<std::vector<Ort::Value>> ort_outputs = std::make_shared<std::vector<Ort::Value>>();
+    ort_outputs->emplace_back(Ort::Value{nullptr});
+    out_value_queue.push(ort_outputs);
+
     std::shared_ptr<std::vector<Ort::Value>> input_tensors = data_queue.front();
     atomic_wait.store(true);
 
-    std::cout << "Running async..." << std::endl;
+    std::cout << "Running classifier async..." << std::endl;
 
     session->RunAsync(
         Ort::RunOptions{nullptr},
@@ -77,7 +82,7 @@ void WakeClassifier::runModelAsync(std::vector<Ort::Value> &output_values)
         input_tensors->data(),
         input_names_arrays.size(),
         output_names_arrays.data(),
-        output_values.data(),
+        ort_outputs->data(),
         output_names_arrays.size(),
         mainRunCallback,
         &data_queue);
@@ -118,6 +123,7 @@ void WakeClassifier::runModelAsync(std::vector<Ort::Value> &input_tensors, std::
 
 void WakeClassifier::mainRunCallback(void *user_data, OrtValue **outputs, size_t num_outputs, OrtStatusPtr status_ptr)
 {
+    std::cout << "classifier callback" << std::endl;
     std::queue<std::shared_ptr<std::vector<Ort::Value>>>* d_queue = reinterpret_cast<std::queue<std::shared_ptr<std::vector<Ort::Value>>>*>(user_data);
     Ort::Status status(status_ptr);
     if (!status.IsOK())
@@ -126,12 +132,13 @@ void WakeClassifier::mainRunCallback(void *user_data, OrtValue **outputs, size_t
         exit(-1);
     }
     Ort::Value output_value(outputs[0]);
-    d_queue->pop();
     int test = ortValueToTorchAndArgmax(output_value);
     std::cout << "Res: " << test << std::endl;
     if (test == 27) {
         std::cout << "Marvin" << std::endl;
+        wakeup.store(true);
     }
+    d_queue->pop();
     output_value.release();
     atomic_wait.store(false);
 }

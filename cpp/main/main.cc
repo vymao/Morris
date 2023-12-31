@@ -71,6 +71,10 @@ bool whisper_params_parse(int argc, char **argv, whisper_params &params)
         {
             params.length_ms = std::stoi(argv[++i]);
         }
+        else if (arg == "-m" || arg == "--multiplier") 
+        {
+            params.layer_multiplier = std::stoi(argv[++i]);
+        }
         else if (arg == "--keep")
         {
             params.keep_ms = std::stoi(argv[++i]);
@@ -168,6 +172,7 @@ void whisper_print_usage(int /*argc*/, char **argv, const whisper_params &params
     fprintf(stderr, "            --step N        [%-7d] audio step size in milliseconds\n", params.step_ms);
     fprintf(stderr, "            --length N      [%-7d] audio length in milliseconds\n", params.length_ms);
     fprintf(stderr, "            --keep N        [%-7d] audio to keep from previous step in ms\n", params.keep_ms);
+    fprintf(stderr, "  -m        --multiplier N  [%-7d] multiplier for layered transcription \n", params.layer_multiplier);
     fprintf(stderr, "  -c ID,    --capture ID    [%-7d] capture device ID\n", params.capture_id);
     fprintf(stderr, "  -mt N,    --max-tokens N  [%-7d] maximum number of tokens per audio chunk\n", params.max_tokens);
     fprintf(stderr, "  -ac N,    --audio-ctx N   [%-7d] audio context size (0 - all)\n", params.audio_ctx);
@@ -221,7 +226,7 @@ int main(int argc, char **argv)
     OrtThreadingOptions* thread_opts = nullptr;
     const OrtApi* g_ort = OrtGetApiBase()->GetApi(ORT_API_VERSION);
     g_ort->CreateThreadingOptions(&thread_opts);
-    g_ort->SetGlobalIntraOpNumThreads(thread_opts, 4);
+    g_ort->SetGlobalIntraOpNumThreads(thread_opts, 6);
     g_ort->CreateEnvWithGlobalThreadPools(ORT_LOGGING_LEVEL_WARNING, "onnx_global_threadpool", thread_opts, &environment);
 
     OrtArenaCfg* arena_cfg = nullptr;
@@ -266,6 +271,9 @@ int main(int argc, char **argv)
                     transcriber_session_ptr, 
                     allocator_ptr, 
                     transcriber_extractor,
+                    params.layer_multiplier,
+                    true,
+                    false,
                     additional_args
                     );
         models["transcriber"] = audio_transcriber;
@@ -292,17 +300,24 @@ int main(int argc, char **argv)
     //////////
 
     std::queue<std::shared_ptr<std::vector<float>>> data_queue;
-    std::queue<std::shared_ptr<std::vector<Ort::Value>>> classifier_out;
-    
+
     std::thread audio_stream_t(createAndRunAudioStream, std::ref(params), std::ref(data_queue));
 
     while (true) {
+        if (WakeClassifier::wakeup.load()) {
+            std::cout << "here" << std::endl;
+            std::string res = models["transcriber"]->getTotalOutput();
+            std::cout << "Total res: " << res << std::endl;
+            WakeClassifier::wakeup.store(false);
+        }
         if (!data_queue.empty()) {
             std::cout << "Preparing inputs..." << std::endl;
             std::shared_ptr<std::vector<float>> data = data_queue.front();
             for (auto& model : models) {
-                model.second->prepareInputsAndPush(*data);
+                auto model_ptr = model.second;
+                model_ptr->prepareInputsAndPush(data);
             }
+
             data_queue.pop();
             std::cout << "Done" << std::endl;
         }
@@ -310,14 +325,8 @@ int main(int argc, char **argv)
         for (auto& item : models) {
             std::shared_ptr<AudioModelBase> model = item.second;
             if (model->isReadyForRun()) {
-                std::shared_ptr<std::vector<Ort::Value>> ort_outputs = std::make_shared<std::vector<Ort::Value>>();
-                ort_outputs->emplace_back(Ort::Value{nullptr});
                 //wake_classifier.runModelSync(input_tensors);
-                model->runModelAsync(*ort_outputs);
-                classifier_out.push(ort_outputs);
-            } else {
-                std::chrono::duration<double, std::milli> dur{50};
-                std::this_thread::sleep_for(dur);
+                model->runModelAsync();
             }
         }
     }

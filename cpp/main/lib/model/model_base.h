@@ -31,15 +31,17 @@ public:
                    py::object &extractor);
     virtual ~AudioModelBase() = 0;
     virtual std::vector<Ort::Value> runModelSync(std::vector<Ort::Value> &input_tensors);
-    virtual void runModelAsync(std::vector<Ort::Value> &output_values) = 0;
+    virtual void runModelAsync() = 0;
     virtual void runModelAsync(std::vector<Ort::Value> &input_tensors, 
         std::vector<Ort::Value> &output_values) = 0;
     virtual std::shared_ptr<std::vector<Ort::Value>> prepareInputs(std::vector<float> &input_values) = 0;
-    virtual void prepareInputsAndPush(std::vector<float> &input_values) = 0;
+    virtual void prepareInputsAndPush(std::shared_ptr<std::vector<float>> input_values) = 0;
     virtual bool isReadyForRun() = 0;
 
+    virtual std::string getTotalOutput() {};
     std::shared_ptr<Ort::Session> getSession();
 
+    bool has_secondary_data_queue;
     std::thread::id caller_tid;
     std::vector<std::string> input_names;
     std::vector<std::string> output_names;
@@ -52,6 +54,7 @@ protected:
     std::vector<const char *> input_names_arrays;
     std::vector<const char *> output_names_arrays;
     std::queue<std::shared_ptr<std::vector<Ort::Value>>> data_queue;
+    std::queue<std::shared_ptr<std::vector<Ort::Value>>> out_value_queue;
 
 
 
