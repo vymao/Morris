@@ -27,6 +27,7 @@ cc_binary(
         "//main/lib/audio-streamer:audio_stream",
         "//main/lib/util:common",
         "//main/lib/util:sdl",
+        "//main/lib/llm-generator:generator",
         "@pybind11//:pybind11_embed",
         "@pybind11",
         "@python_macos//:python-lib",

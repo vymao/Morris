@@ -1,1 +1,2 @@
-build --cxxopt=--std=c++17
+build --cxxopt=-std=gnu++20
+build --per_file_copt=.*\.mm\$@-std=gnu++20

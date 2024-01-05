@@ -41,10 +41,11 @@ class LibriSpeechDataset:
                 "input_features": data['input_features'],
                 "max_length": np.asarray([200], dtype=np.int32),
                 "min_length": np.asarray([0], dtype=np.int32),
-                "num_beams": np.asarray([2], dtype=np.int32),
+                "num_beams": np.asarray([1], dtype=np.int32),
                 "num_return_sequences": np.asarray([1], dtype=np.int32),
                 "length_penalty": np.asarray([1.0], dtype=np.float32),
-                "repetition_penalty": np.asarray([1.0], dtype=np.float32)
+                "repetition_penalty": np.asarray([1.0], dtype=np.float32),
+                "early_stopping": np.asarray([True], dtype=np.bool_)
             }
 
             forced_decoder_ids = feature_extractor.get_decoder_prompt_ids(

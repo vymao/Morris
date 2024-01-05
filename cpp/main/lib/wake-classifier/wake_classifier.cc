@@ -62,6 +62,9 @@ void WakeClassifier::prepareInputsAndPush(std::shared_ptr<std::vector<float>> in
 }
 
 bool WakeClassifier::isReadyForRun() {
+    if (!data_queue.empty() && !atomic_wait.load()) {
+        std::cout << "Validation: " << data_queue.size() << " " << atomic_wait.load() << std::endl;
+    }
     return !data_queue.empty() && !atomic_wait.load();
 }
 
@@ -85,7 +88,7 @@ void WakeClassifier::runModelAsync()
         ort_outputs->data(),
         output_names_arrays.size(),
         mainRunCallback,
-        &data_queue);
+        this);
     std::cout << "Done!" << std::endl;
 }
 
@@ -124,7 +127,7 @@ void WakeClassifier::runModelAsync(std::vector<Ort::Value> &input_tensors, std::
 void WakeClassifier::mainRunCallback(void *user_data, OrtValue **outputs, size_t num_outputs, OrtStatusPtr status_ptr)
 {
     std::cout << "classifier callback" << std::endl;
-    std::queue<std::shared_ptr<std::vector<Ort::Value>>>* d_queue = reinterpret_cast<std::queue<std::shared_ptr<std::vector<Ort::Value>>>*>(user_data);
+    WakeClassifier* curr_obj = reinterpret_cast<WakeClassifier*>(user_data);
     Ort::Status status(status_ptr);
     if (!status.IsOK())
     {
@@ -138,7 +141,8 @@ void WakeClassifier::mainRunCallback(void *user_data, OrtValue **outputs, size_t
         std::cout << "Marvin" << std::endl;
         wakeup.store(true);
     }
-    d_queue->pop();
-    output_value.release();
+    curr_obj->data_queue.pop();
+    std::cout << "Callback size: " << curr_obj->data_queue.size() << std::endl;
     atomic_wait.store(false);
+    output_value.release();
 }

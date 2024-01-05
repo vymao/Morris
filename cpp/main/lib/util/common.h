@@ -6,11 +6,17 @@
 #include <iostream>
 #include <sstream>
 
+#include <pybind11/embed.h>
+#include <pybind11/pybind11.h>
+#include <pybind11/numpy.h>
+#include <pybind11/stl.h>
+
 #include <nlohmann/json.hpp>
 
 #include "onnxruntime_cxx_api.h"
 
 using json = nlohmann::json;
+namespace py = pybind11;
 
 struct whisper_params {
     int32_t n_threads  = std::min(4, (int32_t) std::thread::hardware_concurrency());
@@ -35,6 +41,7 @@ struct whisper_params {
     bool tinydiarize   = false;
     bool save_audio    = false; // save audio to wav file
     bool use_gpu       = true;
+    bool use_llm       = false;
 
     std::string language  = "en";
     std::string classifier_model     = "";
@@ -45,5 +52,7 @@ struct whisper_params {
 std::string print_shape(const std::vector<std::int64_t> &v);
 
 int ortValueToTorchAndArgmax(Ort::Value& value_tensor);
+
+Ort::Value pyArrayToTorchAndConcat(py::array_t<float>& left_mat, std::tuple<int> left_size, py::array_t<float>& right_mat, std::tuple<int> right_size);
 
 json parseJSON(std::string file);

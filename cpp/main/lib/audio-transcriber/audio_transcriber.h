@@ -13,6 +13,11 @@
 #include <mutex>
 #include <deque>
 
+#include <pybind11/embed.h>
+#include <pybind11/pybind11.h>
+#include <pybind11/numpy.h>
+#include <pybind11/stl.h>
+
 #include <onnxruntime_cxx_api.h>
 
 #include <nlohmann/json.hpp>
@@ -33,7 +38,7 @@ public:
         const int32_t layered_multiplier,
         const bool use_layered_transcription,
         const bool use_realtime_transription,
-        const std::vector<std::variant<int32_t, float>>& model_args);
+        const std::vector<std::variant<int32_t, float, bool>>& model_args);
     void runModelAsync();
     void runModelAsync(std::vector<Ort::Value> &input_tensors, 
         std::vector<Ort::Value> &output_values);
@@ -51,7 +56,7 @@ public:
     std::queue<std::string> layered_out_queue;
     static std::string layered_string_out;
 private:
-    std::vector<std::variant<int, float>> add_args;
+    std::vector<std::variant<int, float, bool>> add_args;
     std::vector<ONNXTensorElementDataType> arg_types;
     std::unordered_map<int, std::string> id_to_token_map;
     int start_of_prev_id;

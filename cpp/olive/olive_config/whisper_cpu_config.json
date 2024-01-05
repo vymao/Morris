@@ -41,7 +41,7 @@
                     "name": "latency",
                     "type": "latency",
                     "sub_types": [
-                        {"name": "avg", "priority": 1, "goal": {"type": "percent-min-improvement", "value": 5}}
+                        {"name": "avg", "priority": 1, "goal": {"type": "percent-min-improvement", "value": 5.0}}
                     ],
                     "user_config": {
                         "user_script": "olive_config/whisper_dataset.py",
@@ -88,6 +88,13 @@
                 "use_forced_decoder_ids": false,
                 "use_logits_processor": false,
                 "fp16": false
+            }
+        },
+        "perf_tuning": {
+            "type": "OrtPerfTuning",
+            "config": {
+                "user_script": "olive_config/whisper_dataset.py",
+                "dataloader_func": "librispeech_dataloader"
             }
         }
     },

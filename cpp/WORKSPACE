@@ -27,6 +27,10 @@ load("@pybind11_bazel//:python_configure.bzl", "python_configure")
 python_configure(name = "local_config_python")
 
 extra_tools()
+load("@hedron_make_cc_https_easy//:workspace_setup.bzl", "hedron_make_cc_https_easy")
+hedron_make_cc_https_easy()
+load("@hedron_make_cc_https_easy//:transitive_workspace_setup.bzl", "hedron_keep_cc_https_easy")
+hedron_keep_cc_https_easy()
 
 '''new_local_repository(
     name = "libtorch_archive",

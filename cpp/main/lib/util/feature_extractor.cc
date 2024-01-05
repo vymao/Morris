@@ -100,3 +100,13 @@ Ort::Value float_to_tensor(float value)
     auto tensor = Ort::Value::CreateTensor<float>(mem_info, new float(value), 1, shape.data(), 1);
     return tensor;
 }
+
+Ort::Value bool_to_tensor(bool value)
+{
+    Ort::MemoryInfo mem_info =
+        Ort::MemoryInfo::CreateCpu(OrtAllocatorType::OrtArenaAllocator, OrtMemType::OrtMemTypeDefault);
+
+    std::vector<int64_t> shape = {1};
+    auto tensor = Ort::Value::CreateTensor<bool>(mem_info, new bool(value), 1, shape.data(), 1);
+    return tensor;
+}

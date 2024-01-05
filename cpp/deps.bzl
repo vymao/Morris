@@ -44,6 +44,16 @@ def extra_tools():
         tag = "v3.11.3"
     )
 
+    maybe(
+        http_archive,
+        name = "hedron_make_cc_https_easy",
+
+        # Replace the commit hash in both places (below) with the latest, rather than using the stale one here.
+        # Even better, set up Renovate and let it do the work for you (see "Suggestion: Updates" in the README).
+        url = "https://github.com/hedronvision/bazel-make-cc-https-easy/archive/fb1d005823e1a29a976f833c4b15e0fde2d60290.tar.gz",
+        strip_prefix = "bazel-make-cc-https-easy-fb1d005823e1a29a976f833c4b15e0fde2d60290",
+    )
+
 def extra_bazel_deps():
     maybe(
         http_archive,

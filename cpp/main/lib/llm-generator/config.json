@@ -1,0 +1,13 @@
+{
+    "endpoint_url": "https://api.together.xyz/inference",
+    "api_key": "0223b2723503dc40689e6186be25e55b551a64ed451b9c071deec26fc2e12c04",
+    "model_settings": {
+        "model": "togethercomputer/RedPajama-INCITE-7B-Instruct",
+        "prompt": "",
+        "temperature": 0.7,
+        "top_p": 0.7,
+        "top_k": 50,
+        "max_tokens": 100,
+        "repetition_penalty": 1
+      }
+}

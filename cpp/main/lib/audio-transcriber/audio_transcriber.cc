@@ -1,8 +1,3 @@
-#include <pybind11/embed.h>
-#include <pybind11/pybind11.h>
-#include <pybind11/numpy.h>
-#include <pybind11/stl.h>
-
 #include <algorithm> // std::generate
 #include <cassert>
 #include <cstddef>
@@ -37,7 +32,7 @@ AudioTranscriber::AudioTranscriber(
     const int32_t layered_multiplier,
     const bool use_layered_transcription = false,
     const bool use_realtime_transcription = true,
-    const std::vector<std::variant<int32_t, float>> &model_args = {}) : AudioModelBase(model, new_session, global_allocator, extractor),
+    const std::vector<std::variant<int32_t, float, bool>> &model_args = {}) : AudioModelBase(model, new_session, global_allocator, extractor),
                                                                         add_args(model_args),
                                                                         multiplier(layered_multiplier),
                                                                         use_realtime(use_realtime_transcription),
@@ -111,11 +106,17 @@ std::shared_ptr<std::vector<Ort::Value>> AudioTranscriber::prepareInputs(std::ve
     {
         for (int i = 0; i < add_args.size(); i++)
         {
-            // std::cout << arg_types[i] << std::endl;
+            //std::cout << "i: " << i << std::endl;
+             std::cout << arg_types[i] << std::endl;
             if (arg_types[i] == ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT || arg_types[i] == ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT16)
             {
                 float var = std::get<float>(add_args[i]);
                 input_tensor->emplace_back(float_to_tensor(var));
+            }
+            else if (arg_types[i] == ONNX_TENSOR_ELEMENT_DATA_TYPE_BOOL) 
+            {
+                bool var = std::get<bool>(add_args[i]);
+                input_tensor->emplace_back(bool_to_tensor(var));
             }
             else
             {
@@ -176,7 +177,7 @@ void AudioTranscriber::runModelAsync()
             this);
     }
 
-    if (layered_data_queue.size() == multiplier && use_layered)
+    if (realtime_out_queue.size() == multiplier && use_layered)
     {
         std::shared_ptr<std::vector<Ort::Value>> layered_ort_outputs = std::make_shared<std::vector<Ort::Value>>();
         layered_ort_outputs->emplace_back(Ort::Value{nullptr});
@@ -204,6 +205,7 @@ void AudioTranscriber::runModelAsync()
             output_names_arrays.size(),
             layeredRunCallback,
             this);
+            
     }
 }
 
@@ -299,6 +301,7 @@ void AudioTranscriber::layeredRunCallback(void *obj, OrtValue **outputs, size_t 
 
     output_value.release();
     layered_atomic_wait.store(false);
+    std::cout << "don" << std::endl;
 }
 
 bool AudioTranscriber::isSpecialToken(int id)
@@ -333,10 +336,10 @@ std::string AudioTranscriber::processIDstoToken(const int *ids_pointer, size_t i
             int id = *ptr;
             ptr++;
             // std::cout << "ID: " << id << std::endl;
-            if (id == end_of_text_id)
-            {
-                break;
-            }
+            // if (id == end_of_text_id)
+            // {
+            //     break;
+            // }
             if (skip_special_tokens && isSpecialToken(id))
             {
                 continue;

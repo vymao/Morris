@@ -28,6 +28,7 @@
 #include "lib/util/feature_extractor.h"
 #include "lib/wake-classifier/wake_classifier.h"
 #include "lib/audio-transcriber/audio_transcriber.h"
+#include "lib/llm-generator/generation.h"
 #include "lib/audio-streamer/audio_stream.h"
 #include "lib/model/model_base.h"
 
@@ -36,11 +37,13 @@ using std::chrono::duration_cast;
 using std::chrono::duration;
 using std::chrono::milliseconds;
 
+using namespace generation;
+
 namespace py = pybind11;
-namespace fs = std::filesystem;
 
 constexpr const char* kCpuExecutionProvider = "CPUExecutionProvider";
 static const char* const kOrtSessionOptionsConfigUseEnvAllocators = "session.use_env_allocators";
+static const char* const kOrtSessionOptionsConfigIntraOpThreadAffinities = "session.intra_op_thread_affinities";
 
 void whisper_print_usage(int argc, char **argv, const whisper_params &params);
 
@@ -131,6 +134,10 @@ bool whisper_params_parse(int argc, char **argv, whisper_params &params)
         {
             params.transcriber_model = argv[++i];
         }
+        else if (arg == "-llm" || arg == "--use-llm")
+        {
+            params.use_llm = true;
+        }
         else if (arg == "-f" || arg == "--file")
         {
             params.fname_out = argv[++i];
@@ -184,8 +191,9 @@ void whisper_print_usage(int /*argc*/, char **argv, const whisper_params &params
     fprintf(stderr, "  -ps,      --print-special [%-7s] print special tokens\n", params.print_special ? "true" : "false");
     fprintf(stderr, "  -kc,      --keep-context  [%-7s] keep context between audio chunks\n", params.no_context ? "false" : "true");
     fprintf(stderr, "  -l LANG,  --language LANG [%-7s] spoken language\n", params.language.c_str());
-    fprintf(stderr, "  -cm FNAME, --class_model FNAME   [%-7s] model path\n", params.classifier_model.c_str());
-    fprintf(stderr, "  -tm FNAME, --trans_model FNAME   [%-7s] model path\n", params.transcriber_model.c_str());
+    fprintf(stderr, "  -cm FNAME, --class_model FNAME   [%-7s] classifier model path\n", params.classifier_model.c_str());
+    fprintf(stderr, "  -tm FNAME, --trans_model FNAME   [%-7s] transcriber model path\n", params.transcriber_model.c_str());
+    fprintf(stderr, "  -llm,     --use-llm       [%-7s] enable LLM response\n", params.use_llm ? "true" : "false");
     fprintf(stderr, "  -f FNAME, --file FNAME    [%-7s] text output file name\n", params.fname_out.c_str());
     fprintf(stderr, "  -tdrz,    --tinydiarize   [%-7s] enable tinydiarize (requires a tdrz model)\n", params.tinydiarize ? "true" : "false");
     fprintf(stderr, "  -sa,      --save-audio    [%-7s] save the recorded audio to a file\n", params.save_audio ? "true" : "false");
@@ -221,32 +229,34 @@ int main(int argc, char **argv)
 
     std::cout << std::filesystem::current_path() << std::endl;
 
-    std::cout << "Creating ONNX environment and sessions...";
-    OrtEnv* environment;
-    OrtThreadingOptions* thread_opts = nullptr;
+    std::cout << "Creating ONNX environment, models, and sessions...";
+    Ort::Env env(ORT_LOGGING_LEVEL_INFO, "example-model-explorer");
+    OrtEnv* env_ptr = (OrtEnv*)(env);
+    //OrtThreadingOptions* thread_opts = nullptr;
     const OrtApi* g_ort = OrtGetApiBase()->GetApi(ORT_API_VERSION);
-    g_ort->CreateThreadingOptions(&thread_opts);
-    g_ort->SetGlobalIntraOpNumThreads(thread_opts, 6);
-    g_ort->CreateEnvWithGlobalThreadPools(ORT_LOGGING_LEVEL_WARNING, "onnx_global_threadpool", thread_opts, &environment);
+    //g_ort->CreateThreadingOptions(&thread_opts);
+    //g_ort->SetGlobalIntraOpNumThreads(thread_opts, 3);
+    //g_ort->CreateEnvWithGlobalThreadPools(ORT_LOGGING_LEVEL_WARNING, "onnx_global_threadpool", thread_opts, &environment);
 
     OrtArenaCfg* arena_cfg = nullptr;
     OrtMemoryInfo* meminfo = nullptr;
-    const char* keys[] = {"max_mem", "arena_extend_strategy", "initial_chunk_size_bytes", "max_dead_bytes_per_chunk", "initial_growth_chunk_size_bytes", "max_power_of_two_extend_bytes"};
-    const size_t values[] = {0 /*let ort pick default max memory*/, 0, 0, 0, 0, 0};
-    g_ort->CreateArenaCfgV2(keys, values, 5, &arena_cfg);
+    const char* keys[] = {"max_mem", "initial_chunk_size_bytes", "initial_growth_chunk_size_bytes", "arena_extend_strategy"};
+    const size_t values[] = {0 /*let ort pick default max memory*/, 1024 * 1024 * 1024, 1024 * 1024 * 1024, 1};
+    g_ort->CreateArenaCfgV2(keys, values, 4, &arena_cfg);
+    std::cout << "Max mem: " << std::numeric_limits<size_t>::max() << std::endl;
 
     std::vector<const char*> provider_keys, provider_values;
-    g_ort->CreateAndRegisterAllocatorV2(environment, kCpuExecutionProvider, meminfo, arena_cfg, provider_keys.data(), provider_values.data(), 0);
+    g_ort->CreateAndRegisterAllocatorV2(env_ptr, kCpuExecutionProvider, meminfo, arena_cfg, provider_keys.data(), provider_values.data(), 0);
 
 
-    Ort::SessionOptions session_options;
-    session_options.DisablePerSessionThreads();
-    session_options.AddConfigEntry(kOrtSessionOptionsConfigUseEnvAllocators, "1");
+    //Ort::SessionOptions session_options;
+    //session_options.DisablePerSessionThreads();
+    //session_options.AddConfigEntry(kOrtSessionOptionsConfigUseEnvAllocators, "1");
 
-    Ort::Env env = Ort::Env(environment);
-    env.UpdateEnvWithCustomLogLevel(ORT_LOGGING_LEVEL_WARNING);
+    //Ort::Env env = Ort::Env(environment);
+    //env.UpdateEnvWithCustomLogLevel(ORT_LOGGING_LEVEL_WARNING);
 
-    Ort::ThrowOnError(RegisterCustomOps(static_cast<OrtSessionOptions*>(session_options), OrtGetApiBase()));
+    //Ort::ThrowOnError(RegisterCustomOps(static_cast<OrtSessionOptions*>(session_options), OrtGetApiBase()));
     std::shared_ptr<Ort::Session> classifier_session_ptr;
     std::shared_ptr<Ort::Session> transcriber_session_ptr;
     if (!params.classifier_model.size() && !params.transcriber_model.size()) {
@@ -256,16 +266,26 @@ int main(int argc, char **argv)
 
     std::shared_ptr<Ort::AllocatorWithDefaultOptions> allocator_ptr = std::make_shared<Ort::AllocatorWithDefaultOptions>();
     
+    /////// Initialize models
     std::unordered_map<std::string, std::shared_ptr<AudioModelBase>> models;
     if (params.classifier_model.size()) {
-        std::shared_ptr<Ort::Session> classifier_session_ptr = std::make_shared<Ort::Session>(env, params.classifier_model.c_str(), session_options);
+        Ort::SessionOptions classifier_session_options;
+        classifier_session_options.AddConfigEntry(kOrtSessionOptionsConfigUseEnvAllocators, "1");
+        classifier_session_options.SetIntraOpNumThreads(2);
+        classifier_session_options.AddConfigEntry(kOrtSessionOptionsConfigIntraOpThreadAffinities, "1");
+        std::shared_ptr<Ort::Session> classifier_session_ptr = std::make_shared<Ort::Session>(env, params.classifier_model.c_str(), classifier_session_options);
         std::shared_ptr<WakeClassifier> wake_classifier = std::make_shared<WakeClassifier>("MIT/ast-finetuned-speech-commands-v2", classifier_session_ptr, allocator_ptr, classifier_extractor);
         models["classifier"] = wake_classifier;
     }
 
-    std::vector<std::variant<int32_t, float>> additional_args = {20, 0, 2, 1, 1.0f, 1.0f};
+    std::vector<std::variant<int32_t, float, bool>> additional_args = {20, 0, 1, 1, 1.0f, 1.0f, 1.0f};
     if (params.transcriber_model.size()) {
-        std::shared_ptr<Ort::Session> transcriber_session_ptr = std::make_shared<Ort::Session>(env, params.transcriber_model.c_str(), session_options);
+        Ort::SessionOptions transcriber_session_options;
+        transcriber_session_options.AddConfigEntry(kOrtSessionOptionsConfigUseEnvAllocators, "1");
+        transcriber_session_options.SetIntraOpNumThreads(4);
+        transcriber_session_options.SetInterOpNumThreads(1);
+        transcriber_session_options.AddConfigEntry(kOrtSessionOptionsConfigIntraOpThreadAffinities, "2;3;4");
+        std::shared_ptr<Ort::Session> transcriber_session_ptr = std::make_shared<Ort::Session>(env, params.transcriber_model.c_str(), transcriber_session_options);
         std::shared_ptr<AudioTranscriber> audio_transcriber = std::make_shared<AudioTranscriber>(
                     "openai/whisper-base.en", 
                     transcriber_session_ptr, 
@@ -273,11 +293,21 @@ int main(int argc, char **argv)
                     transcriber_extractor,
                     params.layer_multiplier,
                     true,
-                    false,
+                    true,
                     additional_args
                     );
         models["transcriber"] = audio_transcriber;
     }
+
+
+    VirtualTextGenerator llm_generator;
+    if (params.use_llm) {
+        llm_generator = VirtualTextGenerator();
+        std::string test = "This is a test, please respond with a message.";
+        std::cout << llm_generator.queryVirtualLLM(test) << std::endl;
+    }
+
+
 
     std::cout << "done." << std::endl;
 
@@ -304,14 +334,13 @@ int main(int argc, char **argv)
     std::thread audio_stream_t(createAndRunAudioStream, std::ref(params), std::ref(data_queue));
 
     while (true) {
-        if (WakeClassifier::wakeup.load()) {
-            std::cout << "here" << std::endl;
-            std::string res = models["transcriber"]->getTotalOutput();
-            std::cout << "Total res: " << res << std::endl;
-            WakeClassifier::wakeup.store(false);
-        }
+        // if (WakeClassifier::wakeup.load()) {
+        //     std::string res = models["transcriber"]->getTotalOutput();
+        //     std::cout << "Total res: " << res << std::endl;
+        //     WakeClassifier::wakeup.store(false);
+        // }
         if (!data_queue.empty()) {
-            std::cout << "Preparing inputs..." << std::endl;
+            std::cout << "Preparing inputs...";
             std::shared_ptr<std::vector<float>> data = data_queue.front();
             for (auto& model : models) {
                 auto model_ptr = model.second;

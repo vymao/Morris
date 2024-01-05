@@ -35,7 +35,7 @@ void createAndRunAudioStream(whisper_params& params, std::queue<std::shared_ptr<
     const int n_samples_step = (1e-3*params.step_ms  )*params.audio_sampling_rate;
     const int n_samples_len  = (1e-3*params.length_ms)*params.audio_sampling_rate;
     const int n_samples_keep = (1e-3*params.keep_ms  )*params.audio_sampling_rate;
-    const int n_samples_30s  = (1e-3*30000.0         )*params.audio_sampling_rate;
+    const int n_samples_30s  = (1e-3*5000.0         )*params.audio_sampling_rate;
 
     const bool use_vad = n_samples_step <= 0; // sliding window mode uses VAD
 
@@ -107,7 +107,7 @@ void createAndRunAudioStream(whisper_params& params, std::queue<std::shared_ptr<
                 audio.get(params.step_ms, *pcmf32_new);
 
                 if ((int) pcmf32_new->size() > 2*n_samples_step) {
-                    fprintf(stderr, "\n\n%s: WARNING: cannot process audio fast enough, dropping audio ...\n\n", __func__);
+                    std::cout << "WARNING: cannot process audio fast enough, dropping audio" << std::endl;
                     audio.clear();
                     continue;
                 }
@@ -117,7 +117,7 @@ void createAndRunAudioStream(whisper_params& params, std::queue<std::shared_ptr<
                     break;
                 }
 
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                //std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
 
             const int n_samples_new = pcmf32_new->size();
@@ -145,5 +145,6 @@ void createAndRunAudioStream(whisper_params& params, std::queue<std::shared_ptr<
         }
     }
 
+    std::cout << "Ending audio stream..." << std::endl;
     audio.pause();
 }
