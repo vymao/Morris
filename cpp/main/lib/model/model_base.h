@@ -20,6 +20,8 @@
 #include <pybind11/numpy.h>
 #include <pybind11/stl.h>
 
+#include "audio_tensor.h"
+
 namespace py = pybind11;
 
 class AudioModelBase
@@ -32,9 +34,7 @@ public:
     virtual ~AudioModelBase() = 0;
     virtual std::vector<Ort::Value> runModelSync(std::vector<Ort::Value> &input_tensors);
     virtual void runModelAsync() = 0;
-    virtual void runModelAsync(std::vector<Ort::Value> &input_tensors, 
-        std::vector<Ort::Value> &output_values) = 0;
-    virtual std::shared_ptr<std::vector<Ort::Value>> prepareInputs(std::vector<float> &input_values) = 0;
+    virtual std::shared_ptr<audio::AudioTensor> prepareInputs(std::vector<float> &input_values) = 0;
     virtual void prepareInputsAndPush(std::shared_ptr<std::vector<float>> input_values) = 0;
     virtual bool isReadyForRun() = 0;
 
@@ -53,7 +53,7 @@ protected:
     py::object feature_extractor;
     std::vector<const char *> input_names_arrays;
     std::vector<const char *> output_names_arrays;
-    std::queue<std::shared_ptr<std::vector<Ort::Value>>> data_queue;
+    std::queue<std::shared_ptr<audio::AudioTensor>> data_queue;
     std::queue<std::shared_ptr<std::vector<Ort::Value>>> out_value_queue;
 
 
@@ -61,7 +61,7 @@ protected:
     template <typename Function>
     std::vector<std::string> getInputOrOutputNames(size_t size, Function name_allocator_func);
     std::vector<const char *> getInputOrOutputNameArray(std::vector<std::string> &name_vector);
-    virtual std::shared_ptr<std::vector<Ort::Value>> audioToValueVector(std::vector<float> &float_vector, py::object &extractor) = 0;
+    virtual std::shared_ptr<audio::AudioTensor> audioToValueVector(std::vector<float> &float_vector, py::object &extractor) = 0;
     
 };
 

@@ -54,6 +54,13 @@ def extra_tools():
         strip_prefix = "bazel-make-cc-https-easy-fb1d005823e1a29a976f833c4b15e0fde2d60290",
     )
 
+    maybe(
+        git_repository,
+        name = "com_google_googletest",
+        remote = "https://github.com/google/googletest.git",
+        tag = "v1.14.0"
+    )
+
 def extra_bazel_deps():
     maybe(
         http_archive,

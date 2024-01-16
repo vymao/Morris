@@ -1,7 +1,20 @@
 load("@pybind11_bazel//:build_defs.bzl", "pybind_extension")
-load("@rules_cc//cc:defs.bzl", "cc_library")
-
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 package(default_visibility = ["//visibility:public"])
+
+cc_test(
+  name = "common_test",
+  size = "small",
+  srcs = ["common_test.cc"],
+  deps = [
+    "@com_google_googletest//:gtest_main",
+    "@libtorch//:torch_cpu",
+    "@onnx_runtime//:onnx_runtime",
+    "@pybind11",
+    "@pybind11//:pybind11_embed",
+    ":common"
+],
+)
 
 cc_library(
     name = "feature_extractor",
@@ -41,5 +54,7 @@ cc_library(
         "@onnx_runtime//:onnx_runtime",
         "@nlohmann_json//:json",
         "@pybind11",
+        "@pybind11//:pybind11_embed",
+        "@python_macos//:python-lib",
     ]
 )

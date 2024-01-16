@@ -38,7 +38,7 @@ int WakeClassifier::getNumOutputNames() {
     return (int) output_names_arrays.size();
 }
 
-std::shared_ptr<std::vector<Ort::Value>> WakeClassifier::audioToValueVector(std::vector<float> &float_vector, py::object &extractor)
+std::shared_ptr<AudioTensor> WakeClassifier::audioToValueVector(std::vector<float> &float_vector, py::object &extractor)
 {
     py::array_t<float> data = py::array_t<float>(py::cast(float_vector));
 
@@ -48,12 +48,12 @@ std::shared_ptr<std::vector<Ort::Value>> WakeClassifier::audioToValueVector(std:
     const auto rdata_size = rdata_buf.shape;
     // float *carray = rdata.mutable_data();
 
-    std::shared_ptr<std::vector<Ort::Value>> input_tensors = std::make_shared<std::vector<Ort::Value>>();
-    input_tensors->emplace_back(buffer_to_tensor<float>(rdata_buf));
-    return input_tensors;
+    std::shared_ptr<AudioTensor> audio_tensor = std::make_shared<AudioTensor>();
+    audio_tensor->setValueTensor(std::move(rdata_buf));
+    return audio_tensor;
 }
 
-std::shared_ptr<std::vector<Ort::Value>> WakeClassifier::prepareInputs(std::vector<float> &input_values) {
+std::shared_ptr<AudioTensor> WakeClassifier::prepareInputs(std::vector<float> &input_values) {
     return audioToValueVector(input_values, feature_extractor);
 }
 
@@ -62,9 +62,6 @@ void WakeClassifier::prepareInputsAndPush(std::shared_ptr<std::vector<float>> in
 }
 
 bool WakeClassifier::isReadyForRun() {
-    if (!data_queue.empty() && !atomic_wait.load()) {
-        std::cout << "Validation: " << data_queue.size() << " " << atomic_wait.load() << std::endl;
-    }
     return !data_queue.empty() && !atomic_wait.load();
 }
 
@@ -74,7 +71,7 @@ void WakeClassifier::runModelAsync()
     ort_outputs->emplace_back(Ort::Value{nullptr});
     out_value_queue.push(ort_outputs);
 
-    std::shared_ptr<std::vector<Ort::Value>> input_tensors = data_queue.front();
+    std::shared_ptr<AudioTensor> input_tensors = data_queue.front();
     atomic_wait.store(true);
 
     std::cout << "Running classifier async..." << std::endl;
@@ -82,46 +79,13 @@ void WakeClassifier::runModelAsync()
     session->RunAsync(
         Ort::RunOptions{nullptr},
         input_names_arrays.data(),
-        input_tensors->data(),
+        input_tensors->getValueTensor(),
         input_names_arrays.size(),
         output_names_arrays.data(),
         ort_outputs->data(),
         output_names_arrays.size(),
         mainRunCallback,
         this);
-    std::cout << "Done!" << std::endl;
-}
-
-void WakeClassifier::runModelAsync(std::vector<Ort::Value> &input_tensors, std::vector<Ort::Value> &output_values)
-{
-    std::cout << "Running model..." << std::endl;
-    std::chrono::duration<double, std::milli> dur{100};
-    atomic_wait.store(true);
-
-    auto t1 = high_resolution_clock::now();
-
-    std::cout << "Running async..." << std::endl;
-
-
-    session->RunAsync(
-        Ort::RunOptions{nullptr},
-        input_names_arrays.data(),
-        input_tensors.data(),
-        input_names_arrays.size(),
-        output_names_arrays.data(),
-        output_values.data(),
-        output_names_arrays.size(),
-        mainRunCallback,
-        &caller_tid);
-    auto t2 = high_resolution_clock::now();
-    auto ms_int = duration_cast<milliseconds>(t2 - t1);
-
-    for (int i = 0; i < 20; ++i) {
-        std::this_thread::sleep_for(dur);
-    }
-
-    std::cout << ms_int.count() << "ms\n";
-    // std::cout << "Done!" << std::endl;
 }
 
 void WakeClassifier::mainRunCallback(void *user_data, OrtValue **outputs, size_t num_outputs, OrtStatusPtr status_ptr)
@@ -142,7 +106,6 @@ void WakeClassifier::mainRunCallback(void *user_data, OrtValue **outputs, size_t
         wakeup.store(true);
     }
     curr_obj->data_queue.pop();
-    std::cout << "Callback size: " << curr_obj->data_queue.size() << std::endl;
     atomic_wait.store(false);
     output_value.release();
 }

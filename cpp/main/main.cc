@@ -227,8 +227,6 @@ int main(int argc, char **argv)
     py::object transcriber_extractor = AutoProcessor.attr("from_pretrained")("openai/whisper-base.en");
     std::cout << "done." << std::endl;
 
-    std::cout << std::filesystem::current_path() << std::endl;
-
     std::cout << "Creating ONNX environment, models, and sessions...";
     Ort::Env env(ORT_LOGGING_LEVEL_INFO, "example-model-explorer");
     OrtEnv* env_ptr = (OrtEnv*)(env);
@@ -278,13 +276,15 @@ int main(int argc, char **argv)
         models["classifier"] = wake_classifier;
     }
 
-    std::vector<std::variant<int32_t, float, bool>> additional_args = {20, 0, 1, 1, 1.0f, 1.0f, 1.0f};
+    // std::vector<std::variant<int32_t, float, bool>> additional_args = {20, 0, 1, 1, 1.0f, 1.0f, 1.0f};
     if (params.transcriber_model.size()) {
         Ort::SessionOptions transcriber_session_options;
         transcriber_session_options.AddConfigEntry(kOrtSessionOptionsConfigUseEnvAllocators, "1");
         transcriber_session_options.SetIntraOpNumThreads(4);
         transcriber_session_options.SetInterOpNumThreads(1);
         transcriber_session_options.AddConfigEntry(kOrtSessionOptionsConfigIntraOpThreadAffinities, "2;3;4");
+
+        struct TranscriberInferenceParams additional_args;
         std::shared_ptr<Ort::Session> transcriber_session_ptr = std::make_shared<Ort::Session>(env, params.transcriber_model.c_str(), transcriber_session_options);
         std::shared_ptr<AudioTranscriber> audio_transcriber = std::make_shared<AudioTranscriber>(
                     "openai/whisper-base.en", 
@@ -292,9 +292,9 @@ int main(int argc, char **argv)
                     allocator_ptr, 
                     transcriber_extractor,
                     params.layer_multiplier,
+                    additional_args,
                     true,
-                    true,
-                    additional_args
+                    true
                     );
         models["transcriber"] = audio_transcriber;
     }
@@ -304,7 +304,7 @@ int main(int argc, char **argv)
     if (params.use_llm) {
         llm_generator = VirtualTextGenerator();
         std::string test = "This is a test, please respond with a message.";
-        std::cout << llm_generator.queryVirtualLLM(test) << std::endl;
+        llm_generator.queryVirtualLLM(test);
     }
 
 
@@ -316,14 +316,16 @@ int main(int argc, char **argv)
         for (std::size_t i = 0; i < model->getSession()->GetInputCount(); i++) {
             auto input_name = model->input_names[i];
             auto input_shapes = model->getSession()->GetInputTypeInfo(i).GetTensorTypeAndShapeInfo().GetShape();
-            std::cout << "\t" << input_name << " : " << print_shape(input_shapes) << std::endl;
+            auto input_type = model->getSession()->GetInputTypeInfo(i).GetTensorTypeAndShapeInfo().GetElementType();
+            std::cout << "\t" << input_name << " : " << print_shape(input_shapes) << " | Type: " << input_type << std::endl;
         }
 
         std::cout << "Outputs" << std::endl;
         for (std::size_t i = 0; i < model->getSession()->GetOutputCount(); i++) {
             auto output_name = model->output_names[i];
             auto output_shapes = model->getSession()->GetOutputTypeInfo(i).GetTensorTypeAndShapeInfo().GetShape();
-            std::cout << "\t" << output_name << " : " << print_shape(output_shapes) << std::endl;
+            auto input_type = model->getSession()->GetOutputTypeInfo(i).GetTensorTypeAndShapeInfo().GetElementType();
+            std::cout << "\t" << output_name << " : " << print_shape(output_shapes) << " | Type: " << input_type << std::endl;
         }
     }
 
@@ -339,7 +341,12 @@ int main(int argc, char **argv)
         //     std::cout << "Total res: " << res << std::endl;
         //     WakeClassifier::wakeup.store(false);
         // }
-        if (!data_queue.empty()) {
+        if (data_queue.size() > 5) {
+            data_queue.pop();
+            std::string message = "\033[1;31mFallen behind in transcription, skipping featurization.\033[0m\n";
+            std::cout << message;
+        }
+        else if (!data_queue.empty()) {
             std::cout << "Preparing inputs...";
             std::shared_ptr<std::vector<float>> data = data_queue.front();
             for (auto& model : models) {

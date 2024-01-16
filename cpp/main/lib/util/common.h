@@ -53,6 +53,9 @@ std::string print_shape(const std::vector<std::int64_t> &v);
 
 int ortValueToTorchAndArgmax(Ort::Value& value_tensor);
 
-Ort::Value pyArrayToTorchAndConcat(py::array_t<float>& left_mat, std::tuple<int> left_size, py::array_t<float>& right_mat, std::tuple<int> right_size);
+Ort::Value pyArrayToTorchAndConcat(Ort::Value& ldata, Ort::Value& rdata);
+
+template <typename T>
+Ort::Value rowMajorValue3DConcatBatch(Ort::Value& l_value, int64_t l_nelem, Ort::Value& r_value, int64_t r_nelem);
 
 json parseJSON(std::string file);

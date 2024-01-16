@@ -15,6 +15,7 @@ cc_library(
         "//main/lib/util:feature_extractor",
         "//main/lib/util:common",
         "//main/lib/model:model_base",
+        "//main/lib/model:audio_tensor",
         "@nlohmann_json//:json"
     ]
 )

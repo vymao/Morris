@@ -13,8 +13,8 @@
 
 # ONNX/Olive models
 cpp/main/models/
-cpp/python/models/
-cpp/python/cache*
+cpp/olive/models/
+**cache**
 **onnx
 
 # Pycache

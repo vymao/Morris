@@ -60,8 +60,11 @@ Ort::Value buffer_to_tensor(py::buffer_info &data)
     Ort::MemoryInfo mem_info =
         Ort::MemoryInfo::CreateCpu(OrtAllocatorType::OrtArenaAllocator, OrtMemType::OrtMemTypeDefault);
 
+    float* tensor_data = new float[data.size];
+    
+    std::memcpy(tensor_data, (float* ) data.ptr, sizeof(float) * data.size);
     // std::cout << "Tensor numbers: " << data.data() << " " << data.size() << " " << shape.data() << " " << shape.size() << std::endl;
-    Ort::Value tensor = Ort::Value::CreateTensor<T>(mem_info, (T *)data.ptr, data.size, (int64_t *)data.shape.data(), data.ndim);
+    Ort::Value tensor = Ort::Value::CreateTensor<T>(mem_info, tensor_data, data.size, (int64_t *)data.shape.data(), data.ndim);
     return tensor;
 }
 
@@ -74,39 +77,39 @@ Ort::Value value_to_tensor(T value)
     std::vector<int64_t> shape = {1};
 
     // std::cout << "Tensor numbers: " << data.data() << " " << data.size() << " " << shape.data() << " " << shape.size() << std::endl;
-    Ort::Value tensor = Ort::Value::CreateTensor<T>(mem_info, (T *)&value, 1, shape.data(), 1);
+    Ort::Value tensor = Ort::Value::CreateTensor<T>(mem_info, new T(value), 1, shape.data(), 1);
     const int* test = tensor.GetTensorData<int>();
     std::cout << "Test: " << *test << std::endl;
     return tensor;
 }
 
-Ort::Value int_to_tensor(int32_t value)
+Ort::Value int_to_tensor(int32_t* value)
 {
     Ort::MemoryInfo mem_info =
         Ort::MemoryInfo::CreateCpu(OrtAllocatorType::OrtArenaAllocator, OrtMemType::OrtMemTypeDefault);
 
     std::vector<int64_t> shape = {1};
 
-    auto tensor = Ort::Value::CreateTensor<int32_t>(mem_info, new int32_t(value), 1, shape.data(), 1);
+    auto tensor = Ort::Value::CreateTensor<int32_t>(mem_info, value, 1, shape.data(), 1);
     return tensor;
 }
 
-Ort::Value float_to_tensor(float value)
+Ort::Value float_to_tensor(float* value)
 {
     Ort::MemoryInfo mem_info =
         Ort::MemoryInfo::CreateCpu(OrtAllocatorType::OrtArenaAllocator, OrtMemType::OrtMemTypeDefault);
 
     std::vector<int64_t> shape = {1};
-    auto tensor = Ort::Value::CreateTensor<float>(mem_info, new float(value), 1, shape.data(), 1);
+    auto tensor = Ort::Value::CreateTensor<float>(mem_info, value, 1, shape.data(), 1);
     return tensor;
 }
 
-Ort::Value bool_to_tensor(bool value)
+Ort::Value bool_to_tensor(bool* value)
 {
     Ort::MemoryInfo mem_info =
         Ort::MemoryInfo::CreateCpu(OrtAllocatorType::OrtArenaAllocator, OrtMemType::OrtMemTypeDefault);
 
     std::vector<int64_t> shape = {1};
-    auto tensor = Ort::Value::CreateTensor<bool>(mem_info, new bool(value), 1, shape.data(), 1);
+    auto tensor = Ort::Value::CreateTensor<bool>(mem_info, value, 1, shape.data(), 1);
     return tensor;
 }

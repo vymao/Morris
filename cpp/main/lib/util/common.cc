@@ -21,32 +21,51 @@ int ortValueToTorchAndArgmax(Ort::Value& value_tensor) {
     return torch_tensor.argmax(-1).item().toInt();
 }
 
-Ort::Value pyArrayToTorchAndConcat(py::array_t<float>& left_mat, std::tuple<int> left_size, py::array_t<float>& right_mat, std::tuple<int> right_size) {
-    py::buffer_info ldata_buf = left_mat.request();
-    py::buffer_info rdata_buf = right_mat.request();
-    auto options = torch::TensorOptions().dtype(torch::kFloat32);
-    torch::Tensor left_tensor = torch::from_blob(
-        static_cast<float*>(ldata_buf.ptr),
-        {ldata_buf.shape[0], ldata_buf.shape[1], ldata_buf.shape[2]},
-        options);
-    torch::Tensor right_tensor = torch::from_blob(
-        static_cast<float*>(rdata_buf.ptr),
-        {rdata_buf.shape[0], rdata_buf.shape[1], rdata_buf.shape[2]},
-        options);
-    
-    torch::Tensor cat_tensor = torch::cat({left_tensor, right_tensor}, 0);
-    std::vector<ssize_t> shape(ldata_buf.shape);
-    shape[0] = 2;
+template <typename T>
+Ort::Value rowMajorValue3DConcatBatch(Ort::Value& l_value, int64_t l_nelem, Ort::Value& r_value, int64_t r_nelem) {
+    const std::vector<int64_t> ldata_shape = l_value.GetTensorTypeAndShapeInfo().GetShape();
+    const std::vector<int64_t> rdata_shape = r_value.GetTensorTypeAndShapeInfo().GetShape();
+
+    T* l_value_ptr = const_cast<T*>(l_value.GetTensorData<T>());
+    T* r_value_ptr = const_cast<T*>(r_value.GetTensorData<T>());
+
+    assert(ldata_shape.size() == 3 && rdata_shape.size() == 3);
+    assert(std::reduce(ldata_shape.begin(), ldata_shape.end()) > 0);
+    assert(std::reduce(rdata_shape.begin(), rdata_shape.end()) > 0);
+
+    int64_t total_batch = ldata_shape[0] + rdata_shape[0];
+    T* concat_array = new T[l_nelem + r_nelem];
+
+    T* ptr = concat_array;
+    for (int row = 0; row < ldata_shape[1]; row++) {
+        for (int col = 0; col < ldata_shape[2]; col++) {
+            for (int batch = 0; batch < ldata_shape[0]; batch++) {
+                *ptr = *l_value_ptr;
+                ptr++;
+                l_value_ptr++;
+            }
+
+            for (int batch = 0; batch < rdata_shape[0]; batch++) {
+                *ptr = *r_value_ptr;
+                ptr++;
+                r_value_ptr++;
+            }
+        }
+    }
+
+    std::vector<int64_t> shape = {total_batch, ldata_shape[1], ldata_shape[2]};
 
     Ort::MemoryInfo mem_info =
         Ort::MemoryInfo::CreateCpu(OrtAllocatorType::OrtArenaAllocator, OrtMemType::OrtMemTypeDefault);
-    Ort::Value tensor = Ort::Value::CreateTensor<float>(
+    Ort::Value concat_tensor = Ort::Value::CreateTensor<T>(
         mem_info, 
-        static_cast<float*>(cat_tensor.data_ptr()), 
-        ldata_buf.size + rdata_buf.size, 
+        concat_array, 
+        (size_t) shape[0] * shape[1] * shape[2], 
         (int64_t *)shape.data(), 
-        ldata_buf.ndim);
-    return tensor;
+        3);
+
+    return concat_tensor;
+
 }
 
 json parseJSON(std::string file) {

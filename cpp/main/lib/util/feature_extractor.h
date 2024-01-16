@@ -28,8 +28,8 @@ py::array_t<float> getFloatArrayforMatrix(Matrix& m);
 
 std::vector<Ort::Value> rawAudioToValueVector(std::vector<float>& float_vector, py::object& extractor);
 
-Ort::Value int_to_tensor(int32_t value);
+Ort::Value int_to_tensor(int32_t* value);
 
-Ort::Value float_to_tensor(float value);
+Ort::Value float_to_tensor(float* value);
 
-Ort::Value bool_to_tensor(bool value);
+Ort::Value bool_to_tensor(bool* value);

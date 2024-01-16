@@ -14,8 +14,10 @@
 #include <onnxruntime_cxx_api.h>
 
 #include "main/lib/model/model_base.h"
+#include "main/lib/model/audio_tensor.h"
 
 namespace py = pybind11;
+using namespace audio;
 
 class WakeClassifier : public AudioModelBase
 {
@@ -25,11 +27,9 @@ public:
                    std::shared_ptr<Ort::AllocatorWithDefaultOptions> global_allocator,
                    py::object &extractor);
     void runModelAsync();
-    void runModelAsync(std::vector<Ort::Value> &input_tensors, 
-        std::vector<Ort::Value> &output_values);
     int getNumOutputNames();
     static void mainRunCallback(void *user_data, OrtValue **outputs, size_t num_outputs, OrtStatusPtr status_ptr);
-    std::shared_ptr<std::vector<Ort::Value>> prepareInputs(std::vector<float> &input_values);
+    std::shared_ptr<AudioTensor> prepareInputs(std::vector<float> &input_values);
     void prepareInputsAndPush(std::shared_ptr<std::vector<float>> input_values);
     bool isReadyForRun();
     
@@ -38,6 +38,6 @@ public:
     static std::atomic_bool wakeup;
 
 private:
-    std::shared_ptr<std::vector<Ort::Value>> audioToValueVector(std::vector<float> &float_vector, py::object &extractor);
+    std::shared_ptr<AudioTensor> audioToValueVector(std::vector<float> &float_vector, py::object &extractor);
 
 };
